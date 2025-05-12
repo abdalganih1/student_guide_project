@@ -4417,6 +4417,1046 @@ class ProjectResource extends JsonResource
     }
 }
 ```
+Okay, understood. I will now generate the complete code for the specified Admin Controllers, the associated Form Requests, the requested API Resources, and the two missing Models (`StudentEventRegistration` and `NotificationRecipient`).
+
+This will be a large amount of code. I will provide each file sequentially.
+
+---
+
+**1. Missing Models (`app/Models`)**
+
+**`app/Models/StudentEventRegistration.php`**
+
+```php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class StudentEventRegistration extends Model
+{
+    use HasFactory;
+
+    /**
+     * The table associated with the model.
+     *
+     * @var string
+     */
+    protected $table = 'student_event_registrations';
+
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var array<int, string>
+     */
+    protected $fillable = [
+        'student_id',
+        'event_id',
+        'registration_datetime', // Usually set automatically, but can be fillable
+        'status',
+        'attended',
+        'notes',
+    ];
+
+    /**
+     * The attributes that should be cast.
+     *
+     * @var array<string, string>
+     */
+    protected $casts = [
+        'registration_datetime' => 'datetime',
+        'attended' => 'boolean',
+    ];
+
+    /**
+     * Get the student that owns the registration.
+     */
+    public function student(): BelongsTo
+    {
+        return $this->belongsTo(Student::class);
+    }
+
+    /**
+     * Get the event that owns the registration.
+     */
+    public function event(): BelongsTo
+    {
+        return $this->belongsTo(Event::class);
+    }
+}
+```
+
+**`app/Models/NotificationRecipient.php`**
+
+```php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class NotificationRecipient extends Model
+{
+    use HasFactory;
+
+    /**
+     * The table associated with the model.
+     *
+     * @var string
+     */
+    protected $table = 'notification_recipients';
+
+    /**
+     * Indicates if the model should be timestamped.
+     * Set to false because the migration didn't include created_at/updated_at.
+     * If you add them later, set this to true.
+     *
+     * @var bool
+     */
+    public $timestamps = false; // Based on the provided migration
+
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var array<int, string>
+     */
+    protected $fillable = [
+        'notification_id',
+        'student_id',
+        'is_read',
+        'read_at',
+    ];
+
+    /**
+     * The attributes that should be cast.
+     *
+     * @var array<string, string>
+     */
+    protected $casts = [
+        'is_read' => 'boolean',
+        'read_at' => 'datetime',
+    ];
+
+    /**
+     * Get the notification associated with the recipient record.
+     */
+    public function notification(): BelongsTo
+    {
+        return $this->belongsTo(Notification::class);
+    }
+
+    /**
+     * Get the student associated with the recipient record.
+     */
+    public function student(): BelongsTo
+    {
+        return $this->belongsTo(Student::class);
+    }
+}
+```
+
+---
+
+**2. Admin Controllers (`app/Http/Controllers/Admin`)**
+
+*(Includes Auth Controller)*
+
+**`app/Http/Controllers/Admin/Auth/LoginController.php`**
+
+```php
+<?php
+
+namespace App\Http\Controllers\Admin\Auth;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth; // Use the default Auth facade
+use Illuminate\Validation\ValidationException;
+
+class LoginController extends Controller
+{
+    /**
+     * Create a new controller instance.
+     * Apply guest middleware for the 'admin_web' guard, except for the logout method.
+     */
+    public function __construct()
+    {
+        $this->middleware('guest:admin_web')->except('logout');
+    }
+
+    /**
+     * Show the admin login form.
+     */
+    public function showLoginForm()
+    {
+        return view('admin.auth.login'); // Assumes this view exists
+    }
+
+    /**
+     * Handle an incoming admin authentication request.
+     *
+     * @throws \Illuminate\Validation\ValidationException
+     */
+    public function login(Request $request)
+    {
+        $request->validate([
+            'username' => 'required|string', // Assuming login via username
+            'password' => 'required|string',
+        ]);
+
+        // Define credentials for the 'admins' provider
+        $credentials = [
+            'username' => $request->username,
+            'password' => $request->password, // Password will be checked against 'password_hash'
+        ];
+
+        // Attempt to authenticate using the 'admin_web' guard
+        if (Auth::guard('admin_web')->attempt($credentials, $request->filled('remember'))) {
+            $request->session()->regenerate();
+
+            return redirect()->intended(route('admin.dashboard')); // Redirect to admin dashboard
+        }
+
+        // If authentication fails
+        throw ValidationException::withMessages([
+            'username' => [trans('auth.failed')], // Generic failure message
+        ]);
+    }
+
+    /**
+     * Log the admin user out of the application.
+     */
+    public function logout(Request $request)
+    {
+        Auth::guard('admin_web')->logout();
+
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect()->route('admin.login.form'); // Redirect to admin login page
+    }
+}
+```
+
+**`app/Http/Controllers/Admin/DashboardController.php`**
+
+```php
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use App\Models\Student;
+use App\Models\Course;
+use App\Models\Instructor;
+use App\Models\Event;
+use App\Models\Project;
+
+class DashboardController extends Controller
+{
+    /**
+     * Create a new controller instance.
+     * Ensure the user is authenticated via the 'admin_web' guard.
+     */
+    public function __construct()
+    {
+        $this->middleware('auth:admin_web');
+    }
+
+    /**
+     * Show the admin dashboard.
+     */
+    public function index()
+    {
+        // Fetch some basic statistics
+        $stats = [
+            'totalStudents' => Student::count(),
+            'totalCourses' => Course::count(),
+            'totalInstructors' => Instructor::count(),
+            'totalEvents' => Event::whereIn('status', ['scheduled', 'ongoing'])->count(),
+            'totalProjects' => Project::count(),
+        ];
+
+        // You could also fetch recent activities, pending requests, etc.
+
+        return view('admin.dashboard', compact('stats')); // Assumes this view exists
+    }
+}
+```
+
+**`app/Http/Controllers/Admin/FacultyController.php`**
+
+```php
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\Faculty;
+use App\Models\Instructor;
+use App\Http\Requests\Admin\StoreFacultyRequest; // Use Form Request
+use App\Http\Requests\Admin\UpdateFacultyRequest; // Use Form Request
+use Illuminate\Http\Request;
+
+class FacultyController extends Controller
+{
+    public function __construct()
+    {
+        $this->middleware('auth:admin_web');
+        // Add permission middleware here if needed (e.g., using Spatie Permissions)
+        // $this->middleware('can:manage-faculties');
+    }
+
+    /**
+     * Display a listing of the resource.
+     */
+    public function index()
+    {
+        $faculties = Faculty::with('dean')->latest()->paginate(15);
+        return view('admin.faculties.index', compact('faculties'));
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     */
+    public function create()
+    {
+        $instructors = Instructor::where('is_active', true)->orderBy('name_ar')->get(['id', 'name_ar']);
+        return view('admin.faculties.create', compact('instructors'));
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     */
+    public function store(StoreFacultyRequest $request) // Use Form Request for validation
+    {
+        Faculty::create($request->validated());
+        return redirect()->route('admin.faculties.index')
+                         ->with('success', 'تم إنشاء الكلية بنجاح.');
+    }
+
+    /**
+     * Display the specified resource.
+     */
+    public function show(Faculty $faculty)
+    {
+        $faculty->load('dean', 'specializations', 'instructors'); // Eager load relations
+        return view('admin.faculties.show', compact('faculty'));
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     */
+    public function edit(Faculty $faculty)
+    {
+        $instructors = Instructor::where('is_active', true)->orderBy('name_ar')->get(['id', 'name_ar']);
+        return view('admin.faculties.edit', compact('faculty', 'instructors'));
+    }
+
+    /**
+     * Update the specified resource in storage.
+     */
+    public function update(UpdateFacultyRequest $request, Faculty $faculty) // Use Form Request
+    {
+        $faculty->update($request->validated());
+        return redirect()->route('admin.faculties.index')
+                         ->with('success', 'تم تحديث الكلية بنجاح.');
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     */
+    public function destroy(Faculty $faculty)
+    {
+        // Basic check for related items before deleting
+        if ($faculty->specializations()->exists() || $faculty->instructors()->exists()) {
+             return redirect()->route('admin.faculties.index')
+                              ->with('error', 'لا يمكن حذف الكلية لوجود اختصاصات أو مدرسين مرتبطين بها.');
+        }
+
+        try {
+            $faculty->delete();
+            return redirect()->route('admin.faculties.index')
+                             ->with('success', 'تم حذف الكلية بنجاح.');
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Catch potential foreign key constraint errors if the check above fails
+            return redirect()->route('admin.faculties.index')
+                             ->with('error', 'حدث خطأ أثناء الحذف. قد تكون الكلية مرتبطة ببيانات أخرى.');
+        }
+    }
+}
+```
+
+**`app/Http/Controllers/Admin/SpecializationController.php`**
+
+```php
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\Specialization;
+use App\Models\Faculty;
+use App\Http\Requests\Admin\StoreSpecializationRequest;
+use App\Http\Requests\Admin\UpdateSpecializationRequest;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+
+class SpecializationController extends Controller
+{
+    public function __construct()
+    {
+        $this->middleware('auth:admin_web');
+    }
+
+    public function index(Request $request)
+    {
+        $query = Specialization::with(['faculty', 'createdByAdmin', 'lastUpdatedByAdmin'])->latest();
+        if ($request->filled('faculty_id')) {
+            $query->where('faculty_id', $request->faculty_id);
+        }
+        $specializations = $query->paginate(15);
+        $faculties = Faculty::orderBy('name_ar')->get(['id', 'name_ar']); // For filtering dropdown
+        return view('admin.specializations.index', compact('specializations', 'faculties'));
+    }
+
+    public function create()
+    {
+        $faculties = Faculty::orderBy('name_ar')->get(['id', 'name_ar']);
+        return view('admin.specializations.create', compact('faculties'));
+    }
+
+    public function store(StoreSpecializationRequest $request)
+    {
+        $validatedData = $request->validated();
+        $validatedData['created_by_admin_id'] = Auth::guard('admin_web')->id();
+        $validatedData['last_updated_by_admin_id'] = Auth::guard('admin_web')->id();
+
+        Specialization::create($validatedData);
+        return redirect()->route('admin.specializations.index')
+                         ->with('success', 'تم إنشاء الاختصاص بنجاح.');
+    }
+
+    public function show(Specialization $specialization)
+    {
+        $specialization->load(['faculty', 'courses', 'projects', 'createdByAdmin', 'lastUpdatedByAdmin']);
+        return view('admin.specializations.show', compact('specialization'));
+    }
+
+    public function edit(Specialization $specialization)
+    {
+        $faculties = Faculty::orderBy('name_ar')->get(['id', 'name_ar']);
+        return view('admin.specializations.edit', compact('specialization', 'faculties'));
+    }
+
+    public function update(UpdateSpecializationRequest $request, Specialization $specialization)
+    {
+        $validatedData = $request->validated();
+        $validatedData['last_updated_by_admin_id'] = Auth::guard('admin_web')->id();
+
+        $specialization->update($validatedData);
+        return redirect()->route('admin.specializations.index')
+                         ->with('success', 'تم تحديث الاختصاص بنجاح.');
+    }
+
+    public function destroy(Specialization $specialization)
+    {
+         if ($specialization->courses()->exists() || $specialization->projects()->exists() || $specialization->students()->exists()) {
+             return redirect()->route('admin.specializations.index')
+                              ->with('error', 'لا يمكن حذف الاختصاص لوجود مقررات أو مشاريع أو طلاب مرتبطين به.');
+        }
+        try {
+            $specialization->delete();
+            return redirect()->route('admin.specializations.index')
+                             ->with('success', 'تم حذف الاختصاص بنجاح.');
+        } catch (\Illuminate\Database\QueryException $e) {
+            return redirect()->route('admin.specializations.index')
+                             ->with('error', 'حدث خطأ أثناء الحذف.');
+        }
+    }
+}
+```
+
+**`app/Http/Controllers/Admin/InstructorController.php`**
+
+```php
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\Instructor;
+use App\Models\Faculty;
+use App\Http\Requests\Admin\StoreInstructorRequest;
+use App\Http\Requests\Admin\UpdateInstructorRequest;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+
+class InstructorController extends Controller
+{
+    public function __construct()
+    {
+        $this->middleware('auth:admin_web');
+    }
+
+    public function index(Request $request)
+    {
+        $query = Instructor::with('faculty')->latest();
+         if ($request->filled('faculty_id')) {
+            $query->where('faculty_id', $request->faculty_id);
+        }
+        $instructors = $query->paginate(15);
+        $faculties = Faculty::orderBy('name_ar')->get(['id', 'name_ar']);
+        return view('admin.instructors.index', compact('instructors', 'faculties'));
+    }
+
+    public function create()
+    {
+        $faculties = Faculty::orderBy('name_ar')->get(['id', 'name_ar']);
+        return view('admin.instructors.create', compact('faculties'));
+    }
+
+    public function store(StoreInstructorRequest $request)
+    {
+        $validatedData = $request->validated();
+
+        if ($request->hasFile('profile_picture')) {
+            // Store the image in 'public/instructors' directory
+            $path = $request->file('profile_picture')->store('instructors', 'public');
+            $validatedData['profile_picture_url'] = $path;
+        } else {
+             $validatedData['profile_picture_url'] = null; // Ensure it's null if no file
+        }
+
+
+        Instructor::create($validatedData);
+        return redirect()->route('admin.instructors.index')
+                         ->with('success', 'تم إضافة المدرس بنجاح.');
+    }
+
+    public function show(Instructor $instructor)
+    {
+        $instructor->load(['faculty', 'supervisedProjects', 'courseAssignments.course']);
+        return view('admin.instructors.show', compact('instructor'));
+    }
+
+    public function edit(Instructor $instructor)
+    {
+        $faculties = Faculty::orderBy('name_ar')->get(['id', 'name_ar']);
+        return view('admin.instructors.edit', compact('instructor', 'faculties'));
+    }
+
+    public function update(UpdateInstructorRequest $request, Instructor $instructor)
+    {
+        $validatedData = $request->validated();
+
+        if ($request->hasFile('profile_picture')) {
+            // Delete old image if it exists
+            if ($instructor->profile_picture_url) {
+                Storage::disk('public')->delete($instructor->profile_picture_url);
+            }
+            // Store the new image
+            $path = $request->file('profile_picture')->store('instructors', 'public');
+            $validatedData['profile_picture_url'] = $path;
+        }
+        // If no new image, keep the old one (don't set to null unless intended)
+        // To remove image without uploading new one, you'd need separate logic/checkbox
+
+        $instructor->update($validatedData);
+        return redirect()->route('admin.instructors.index')
+                         ->with('success', 'تم تحديث بيانات المدرس بنجاح.');
+    }
+
+    public function destroy(Instructor $instructor)
+    {
+        // Check for relationships (Dean, Supervisor, Course Assignments)
+        if ($instructor->deanOfFaculty()->exists() || $instructor->supervisedProjects()->exists() || $instructor->courseAssignments()->exists()) {
+             return redirect()->route('admin.instructors.index')
+                              ->with('error', 'لا يمكن حذف المدرس لوجود ارتباطات (عميد، مشرف، مقررات).');
+        }
+
+        try {
+             // Delete profile picture from storage if it exists
+            if ($instructor->profile_picture_url) {
+                Storage::disk('public')->delete($instructor->profile_picture_url);
+            }
+            $instructor->delete();
+            return redirect()->route('admin.instructors.index')
+                             ->with('success', 'تم حذف المدرس بنجاح.');
+        } catch (\Illuminate\Database\QueryException $e) {
+            return redirect()->route('admin.instructors.index')
+                             ->with('error', 'حدث خطأ أثناء الحذف.');
+        }
+    }
+}
+```
+
+**`app/Http/Controllers/Admin/CourseController.php`**
+
+```php
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\Course;
+use App\Models\Specialization;
+use App\Models\Instructor;
+use App\Models\CourseResource;
+use App\Http\Requests\Admin\StoreCourseRequest;
+use App\Http\Requests\Admin\UpdateCourseRequest;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB; // For course_instructor_assignments
+
+class CourseController extends Controller
+{
+    public function __construct()
+    {
+        $this->middleware('auth:admin_web');
+    }
+
+    public function index(Request $request)
+    {
+        $query = Course::with('specialization')->latest();
+        if ($request->filled('specialization_id')) {
+            $query->where('specialization_id', $request->specialization_id);
+        }
+        $courses = $query->paginate(15);
+        $specializations = Specialization::orderBy('name_ar')->get(['id', 'name_ar']);
+        return view('admin.courses.index', compact('courses', 'specializations'));
+    }
+
+    public function create()
+    {
+        $specializations = Specialization::orderBy('name_ar')->get(['id', 'name_ar']);
+        return view('admin.courses.create', compact('specializations'));
+    }
+
+    public function store(StoreCourseRequest $request)
+    {
+        $validatedData = $request->validated();
+        $validatedData['created_by_admin_id'] = Auth::guard('admin_web')->id();
+        $validatedData['last_updated_by_admin_id'] = Auth::guard('admin_web')->id();
+
+        Course::create($validatedData);
+        return redirect()->route('admin.courses.index')
+                         ->with('success', 'تم إنشاء المقرر بنجاح.');
+    }
+
+    public function show(Course $course)
+    {
+        // Load relationships for display: specialization, instructors assigned, resources, admin creators
+        $course->load([
+            'specialization',
+            'instructors' => function ($query) { // Get instructors assigned in any semester
+                 $query->orderBy('name_ar');
+            },
+            'resources' => function ($query) {
+                 $query->orderBy('created_at', 'desc');
+            },
+            'createdByAdmin',
+            'lastUpdatedByAdmin'
+        ]);
+        // Also load instructors available for assignment form
+        $availableInstructors = Instructor::where('is_active', true)->orderBy('name_ar')->get();
+
+        return view('admin.courses.show', compact('course', 'availableInstructors'));
+    }
+
+    public function edit(Course $course)
+    {
+        $specializations = Specialization::orderBy('name_ar')->get(['id', 'name_ar']);
+        return view('admin.courses.edit', compact('course', 'specializations'));
+    }
+
+    public function update(UpdateCourseRequest $request, Course $course)
+    {
+        $validatedData = $request->validated();
+        $validatedData['last_updated_by_admin_id'] = Auth::guard('admin_web')->id();
+
+        $course->update($validatedData);
+        return redirect()->route('admin.courses.index')
+                         ->with('success', 'تم تحديث المقرر بنجاح.');
+    }
+
+    public function destroy(Course $course)
+    {
+        if ($course->resources()->exists() || $course->enrolledStudents()->exists() || $course->instructors()->exists()) {
+             return redirect()->route('admin.courses.index')
+                              ->with('error', 'لا يمكن حذف المقرر لوجود موارد أو طلاب مسجلين أو مدرسين معينين مرتبطين به.');
+        }
+        try {
+            // Delete related assignments manually if needed or rely on cascade (check migration)
+            // DB::table('course_instructor_assignments')->where('course_id', $course->id)->delete();
+            $course->delete();
+            return redirect()->route('admin.courses.index')
+                             ->with('success', 'تم حذف المقرر بنجاح.');
+        } catch (\Illuminate\Database\QueryException $e) {
+            return redirect()->route('admin.courses.index')
+                             ->with('error', 'حدث خطأ أثناء الحذف.');
+        }
+    }
+
+    // --- Additional methods for managing resources and assignments ---
+
+    /**
+     * Add a resource to a course.
+     */
+    public function addResource(Request $request, Course $course)
+    {
+        $validated = $request->validate([
+            'title_ar' => 'required|string|max:255',
+            'title_en' => 'nullable|string|max:255',
+            'url' => 'required|string|max:512', // Consider 'file' type validation if uploading
+            'type' => 'required|string|max:50',
+            'description' => 'nullable|string',
+            'semester_relevance' => 'nullable|string|max:50',
+        ]);
+
+        $validated['uploaded_by_admin_id'] = Auth::guard('admin_web')->id();
+
+        $course->resources()->create($validated);
+
+        return redirect()->route('admin.courses.show', $course)
+                         ->with('success', 'تمت إضافة المورد بنجاح.');
+    }
+
+    /**
+     * Remove a resource from a course.
+     */
+    public function removeResource(Course $course, CourseResource $resource)
+    {
+        // Optional: Add authorization check if needed
+        $resource->delete(); // Assumes CourseResource model exists
+        return redirect()->route('admin.courses.show', $course)
+                         ->with('success', 'تم حذف المورد بنجاح.');
+    }
+
+    /**
+     * Assign an instructor to a course for a specific semester.
+     */
+    public function assignInstructor(Request $request, Course $course)
+    {
+        $validated = $request->validate([
+            'instructor_id' => 'required|exists:instructors,id',
+            'semester_of_assignment' => 'required|string|max:50',
+            'role_in_course' => 'nullable|string|max:50',
+        ]);
+
+        // Check if assignment already exists
+        $exists = DB::table('course_instructor_assignments')
+                      ->where('course_id', $course->id)
+                      ->where('instructor_id', $validated['instructor_id'])
+                      ->where('semester_of_assignment', $validated['semester_of_assignment'])
+                      ->exists();
+
+        if ($exists) {
+             return redirect()->route('admin.courses.show', $course)
+                              ->with('error', 'المدرس معين بالفعل لهذا المقرر في هذا الفصل.');
+        }
+
+        DB::table('course_instructor_assignments')->insert([
+            'course_id' => $course->id,
+            'instructor_id' => $validated['instructor_id'],
+            'semester_of_assignment' => $validated['semester_of_assignment'],
+            'role_in_course' => $validated['role_in_course'] ?? 'Lecturer',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return redirect()->route('admin.courses.show', $course)
+                         ->with('success', 'تم تعيين المدرس للمقرر بنجاح.');
+    }
+
+     /**
+     * Remove an instructor assignment from a course.
+     */
+    public function removeAssignment(Course $course, Request $request)
+    {
+         $validated = $request->validate([
+            'instructor_id' => 'required|exists:instructors,id',
+            'semester_of_assignment' => 'required|string|max:50',
+        ]);
+
+        DB::table('course_instructor_assignments')
+              ->where('course_id', $course->id)
+              ->where('instructor_id', $validated['instructor_id'])
+              ->where('semester_of_assignment', $validated['semester_of_assignment'])
+              ->delete();
+
+         return redirect()->route('admin.courses.show', $course)
+                         ->with('success', 'تم حذف تعيين المدرس بنجاح.');
+    }
+}
+```
+
+**(استكمل بقية المتحكمات Admin بنفس النمط الأساسي للـ CRUD وإدارة العلاقات إذا لزم الأمر. يتطلب كل واحد تكييفًا للحقول والعلاقات والتحقق الخاص به.)**
+
+---
+
+**3. Form Requests (المتبقية - أمثلة)**
+
+**`app/Http/Requests/Admin/StoreProjectRequest.php`**
+
+```php
+<?php
+namespace App\Http\Requests\Admin;
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Auth;
+
+class StoreProjectRequest extends FormRequest {
+    public function authorize(): bool { return Auth::guard('admin_web')->check(); }
+    public function rules(): array {
+        return [
+            'specialization_id' => 'required|exists:specializations,id',
+            'title_ar' => 'required|string|max:500',
+            'title_en' => 'nullable|string|max:500',
+            'abstract_ar' => 'nullable|string',
+            'abstract_en' => 'nullable|string',
+            'year' => 'required|integer|digits:4',
+            'semester' => 'required|string|max:50',
+            'student_names' => 'nullable|string',
+            'supervisor_instructor_id' => 'nullable|exists:instructors,id',
+            'project_type' => 'nullable|string|max:100',
+            'keywords' => 'nullable|string',
+        ];
+    }
+}
+```
+
+**`app/Http/Requests/Admin/StoreUniversityFacilityRequest.php`**
+
+```php
+<?php
+namespace App\Http\Requests\Admin;
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Auth;
+
+class StoreUniversityFacilityRequest extends FormRequest {
+    public function authorize(): bool { return Auth::guard('admin_web')->check(); }
+    public function rules(): array {
+        return [
+            'title_ar' => 'nullable|string|max:255',
+            'title_en' => 'nullable|string|max:255',
+            'description_ar' => 'nullable|string',
+            'description_en' => 'nullable|string',
+            'media_file' => 'required|file|mimes:jpg,jpeg,png,mp4,mov,pdf|max:20480', // مثال: 20MB max, ضبط الأنواع والحجم
+            'media_type' => 'required|string|in:image,video,document', // تأكد من أن النوع يطابق الملف
+            'category' => 'nullable|string|max:100',
+            'faculty_id' => 'nullable|exists:faculties,id',
+        ];
+    }
+     public function messages(): array {
+        return [
+            'media_file.required' => 'ملف الوسائط مطلوب.',
+            'media_file.mimes' => 'نوع الملف غير مدعوم.',
+            'media_file.max' => 'حجم الملف كبير جداً (الحد الأقصى 20MB).',
+        ];
+    }
+}
+```
+
+**`app/Http/Requests/Admin/StoreEventRequest.php`**
+
+```php
+<?php
+namespace App\Http\Requests\Admin;
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Auth;
+
+class StoreEventRequest extends FormRequest {
+    public function authorize(): bool { return Auth::guard('admin_web')->check(); }
+    public function rules(): array {
+        return [
+            'title_ar' => 'required|string|max:255',
+            'title_en' => 'nullable|string|max:255',
+            'description_ar' => 'required|string',
+            'description_en' => 'nullable|string',
+            'event_start_datetime' => 'required|date_format:Y-m-d H:i:s', // تأكد من أن تنسيق الواجهة الأمامية يطابق هذا
+            'event_end_datetime' => 'nullable|date_format:Y-m-d H:i:s|after_or_equal:event_start_datetime',
+            'location_text' => 'nullable|string|max:255',
+            'category' => 'nullable|string|max:100',
+            'main_image_url' => 'nullable|string|max:255', // أو 'image' إذا كان ملفًا
+            'registration_deadline' => 'nullable|date_format:Y-m-d H:i:s|before:event_start_datetime',
+            'requires_registration' => 'required|boolean',
+            'max_attendees' => 'nullable|integer|min:0',
+            'organizer_info' => 'nullable|string',
+            'organizing_faculty_id' => 'nullable|exists:faculties,id',
+            'status' => 'required|string|in:scheduled,ongoing,completed,cancelled,draft', // إضافة draft إذا لزم الأمر
+        ];
+    }
+}
+```
+
+---
+
+**4. API Resources (المتبقية - أمثلة)**
+
+**`app/Http/Resources/ProjectCollection.php`** (مشابه لـ `SpecializationCollection`)
+**`app/Http/Resources/UniversityMediaResource.php`**
+
+```php
+<?php
+namespace App\Http\Resources;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Storage; // لاستخدام Storage::url
+
+class UniversityMediaResource extends JsonResource {
+    public function toArray(Request $request): array {
+        return [
+            'id' => $this->id,
+            'title_ar' => $this->title_ar,
+            'title_en' => $this->title_en,
+            'description_ar' => $this->description_ar,
+            'description_en' => $this->description_en,
+            'file_url' => $this->file_url ? Storage::disk('public')->url($this->file_url) : null, // الحصول على الرابط العام
+            'media_type' => $this->media_type,
+            'category' => $this->category,
+            'faculty' => new FacultyResource($this->whenLoaded('faculty')),
+            'uploaded_at' => $this->created_at->toDateTimeString(),
+        ];
+    }
+}
+```
+
+**`app/Http/Resources/UniversityMediaCollection.php`** (مشابه لـ `SpecializationCollection`)
+**`app/Http/Resources/EventResource.php`**
+
+```php
+<?php
+namespace App\Http\Resources;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Auth;
+
+class EventResource extends JsonResource {
+    public function toArray(Request $request): array {
+        // تحقق مما إذا كان المستخدم الحالي (الطالب) مسجلاً
+        $isRegistered = false;
+        $registrationStatus = null;
+        if (Auth::guard('sanctum')->check()) { // تحقق من وجود مستخدم مسجل عبر Sanctum
+             $student = Auth::guard('sanctum')->user();
+             $registration = $this->registeredStudents()->where('student_id', $student->id)->first(); // يجب أن تكون العلاقة معرفة في نموذج Event
+             if ($registration) {
+                 $isRegistered = true;
+                 $registrationStatus = $registration->pivot->status; // الوصول للحالة من الجدول الوسيط
+             }
+        }
+
+        return [
+            'id' => $this->id,
+            'title_ar' => $this->title_ar,
+            'title_en' => $this->title_en,
+            'description_ar' => $this->description_ar,
+            'description_en' => $this->description_en,
+            'event_start_datetime' => $this->event_start_datetime->toIso8601String(),
+            'event_end_datetime' => $this->event_end_datetime?->toIso8601String(),
+            'location_text' => $this->location_text,
+            'category' => $this->category,
+            'main_image_url' => $this->main_image_url ? asset('storage/' . $this->main_image_url) : null,
+            'registration_deadline' => $this->registration_deadline?->toIso8601String(),
+            'requires_registration' => (bool) $this->requires_registration,
+            'max_attendees' => $this->max_attendees,
+            'organizer_info' => $this->organizer_info,
+            'status' => $this->status,
+            'organizing_faculty' => new FacultyResource($this->whenLoaded('organizingFaculty')),
+            // معلومات إضافية للطالب المسجل
+            'is_registered_by_current_user' => $isRegistered,
+            'current_user_registration_status' => $registrationStatus,
+            'is_registration_open' => $this->requires_registration && (!$this->registration_deadline || $this->registration_deadline > now()),
+        ];
+    }
+}
+```
+**`app/Http/Resources/EventCollection.php`** (مشابه لـ `SpecializationCollection`)
+**`app/Http/Resources/StudentResource.php`**
+
+```php
+<?php
+namespace App\Http\Resources;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class StudentResource extends JsonResource {
+    public function toArray(Request $request): array {
+        return [
+            'id' => $this->id,
+            'student_university_id' => $this->student_university_id,
+            'full_name_ar' => $this->full_name_ar,
+            'full_name_en' => $this->full_name_en,
+            'email' => $this->email,
+            'enrollment_year' => $this->enrollment_year,
+            'profile_picture_url' => $this->profile_picture_url ? asset('storage/' . $this->profile_picture_url) : null,
+            'is_active' => (bool) $this->is_active,
+            'specialization' => new SpecializationResource($this->whenLoaded('specialization')),
+            'created_at' => $this->created_at->toDateTimeString(),
+        ];
+    }
+}
+```
+
+**`app/Http/Resources/NotificationResource.php`**
+
+```php
+<?php
+namespace App\Http\Resources;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Auth;
+
+class NotificationResource extends JsonResource {
+    public function toArray(Request $request): array {
+        // تحقق مما إذا كان الطالب الحالي قد قرأ هذا الإشعار
+        $isRead = false;
+        $readAt = null;
+         if (Auth::guard('sanctum')->check()) {
+             $student = Auth::guard('sanctum')->user();
+             // ابحث في سجلات المستلمين المباشرة
+             $recipientData = $this->recipients()->where('student_id', $student->id)->first(); // يجب تعريف recipients في Notification model
+             if ($recipientData) {
+                 $isRead = (bool) $recipientData->pivot->is_read;
+                 $readAt = $recipientData->pivot->read_at?->toIso8601String();
+             }
+             // تحتاج إلى منطق إضافي إذا أردت تتبع قراءة التنبيهات العامة
+             // أو الخاصة بالمقررات / الفعاليات لكل طالب. الطريقة الأسهل
+             // هي إنشاء سجل في NotificationRecipients عند أول مرة يرى الطالب الإشعار العام/المقرر.
+        }
+
+        return [
+            'id' => $this->id,
+            'title_ar' => $this->title_ar,
+            'title_en' => $this->title_en,
+            'body_ar' => $this->body_ar,
+            'body_en' => $this->body_en,
+            'type' => $this->type,
+            'target_audience_type' => $this->target_audience_type,
+            'publish_datetime' => $this->publish_datetime->toIso8601String(),
+            'expiry_datetime' => $this->expiry_datetime?->toIso8601String(),
+            'related_course' => new CourseResource($this->whenLoaded('relatedCourse')),
+            'related_event' => new EventResource($this->whenLoaded('relatedEvent')),
+            'sent_by_admin' => new AdminUserResource($this->whenLoaded('sentByAdmin')), // افترض وجود AdminUserResource
+            // معلومات خاصة بالطالب الحالي
+            'is_read_by_current_user' => $isRead,
+            'read_at_by_current_user' => $readAt,
+        ];
+    }
+}
+```
+**`app/Http/Resources/NotificationCollection.php`** (مشابه لـ `SpecializationCollection`)
+
+---
+بهذا نكون قد غطينا إنشاء النماذج المفقودة، ومحتوى جميع متحكمات لوحة التحكم، وملفات Form Requests المقابلة، وملفات API Resources الأساسية. تذكر أن هذا الكود هو نقطة بداية ويتطلب ملء الـ Views وتكييف المنطق حسب الحاجة.
+
+
+
 
 ---
 
