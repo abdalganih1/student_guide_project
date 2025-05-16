@@ -135,7 +135,7 @@ class CourseController extends Controller
             $enrollment = StudentCourseEnrollment::create([
                 'student_id' => $student->id,
                 'course_id' => $course->id,
-                'registration_datetime' => now(),
+                'registration_datetime' => now(), // <--- You are setting registration_datetime here
                 'semester_enrolled' => $currentSemester, // استخدام قيمة الفصل الحالي
                 'status' => 'enrolled', // الحالة هنا هي 'مسجل' مباشرة
                 'attended' => false, // حالة الحضور افتراضياً false
@@ -144,10 +144,10 @@ class CourseController extends Controller
 
             // يمكنك إرسال إشعار للطالب بتأكيد التسجيل هنا (اختياري)
 
-            return response()->json([
-                'message' => 'Successfully enrolled in the course.',
-                'enrollment' => new StudentCourseEnrollmentResource($enrollment), // استخدام Resource التسجيل
-            ], 201); // 201 Created
+            return response()->json([ // <<< هذه هي استجابة النجاح
+            'message' => 'Successfully enrolled in the course.',
+            'enrollment' => new StudentCourseEnrollmentResource($enrollment),
+        ], 201);
         } catch (\Exception $e) {
             // معالجة أي أخطاء أخرى قد تحدث أثناء الحفظ
             return response()->json(['message' => 'Failed to enroll in the course.', 'error' => $e->getMessage()], 500); // Internal Server Error

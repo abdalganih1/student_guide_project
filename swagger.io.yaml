@@ -163,7 +163,6 @@ components:
           example: "Software Engineering"
         faculty: # يمكن تضمين الكلية هنا كمُلخص
           $ref: '#/components/schemas/FacultySummary'
-
     InstructorSummary:
       type: object
       properties:
@@ -214,6 +213,9 @@ components:
           type: integer
           nullable: true
           example: 3
+        specialization: # هنا قد تكون المشكلة إذا كان يشير إلى SpecializationSummary غير صحيح
+           $ref: '#/components/schemas/SpecializationSummary'
+
 
     ProjectSummary:
       type: object
@@ -233,40 +235,17 @@ components:
           example: 2024
         semester:
           $ref: '#/components/schemas/SemesterEnum'
-        specialization:
-          $ref: '#/components/schemas/SpecializationSummary' # ملخص الاختصاص
-        supervisor:
-          $ref: '#/components/schemas/InstructorSummary' # ملخص المشرف
+        specialization: # هنا قد تكون المشكلة إذا كان يشير إلى SpecializationSummary غير صحيح
+           $ref: '#/components/schemas/SpecializationSummary'
+        supervisor: # هنا قد تكون المشكلة إذا كان يشير إلى InstructorSummary غير صحيح
+           $ref: '#/components/schemas/InstructorSummary'
         student_names:
           type: string
           nullable: true
           example: "بتول المحمد, ضياء الأحمد"
 
 
-    EventSummary:
-      type: object
-      properties:
-        id:
-          type: integer
-          example: 1
-        title_ar:
-          type: string
-          example: "ورشة عمل تطوير تطبيقات فلاتر"
-        title_en:
-          type: string
-          nullable: true
-          example: "Flutter App Development Workshop"
-        event_start_datetime:
-          type: string
-          format: date-time
-          example: "2024-06-15T09:00:00Z"
-        location_text:
-          type: string
-          nullable: true
-          example: "القاعة الرئيسية - مبنى B"
-        requires_registration:
-          type: boolean
-          example: true
+
 
     # ---- Full Entity Schemas ----
     Student:
@@ -301,8 +280,8 @@ components:
         is_active:
           type: boolean
           example: true
-        specialization:
-          $ref: '#/components/schemas/SpecializationSummary' # غالباً نستخدم الملخص هنا
+        specialization: # هنا المشكلة المحتملة، إذا كان SpecializationSummary غير صحيح
+          $ref: '#/components/schemas/SpecializationSummary'
         created_at:
           type: string
           format: date-time
@@ -335,9 +314,9 @@ components:
         status:
           type: string
           example: "published"
-        faculty:
-          $ref: '#/components/schemas/FacultySummary' # استخدام الملخص هنا
-        courses: # قائمة المقررات الكاملة أو الملخصة حسب الحاجة
+        faculty: # هنا المشكلة المحتملة، إذا كان FacultySummary غير صحيح
+          $ref: '#/components/schemas/FacultySummary'
+        courses: # هنا المشكلة المحتملة، إذا كان CourseSummary غير صحيح
           type: array
           items:
             $ref: '#/components/schemas/CourseSummary' # هنا نستخدم الملخص
@@ -366,7 +345,7 @@ components:
         url:
           type: string
           format: url
-          example: "http://127.0.0.1:8000/storage/course_resources/lecture1.pdf"
+          example: "http://127.0.0.1:8000/storage/course_resources/lec1_python.pdf"
         type:
           type: string
           example: "lecture_pdf"
@@ -387,6 +366,7 @@ components:
             name_ar:
               type: string
               example: "مدير المحتوى"
+          nullable: true # يمكن أن يكون null إذا لم يتم تحديد الرافع
         created_at:
           type: string
           format: date-time
@@ -438,9 +418,9 @@ components:
           type: integer
           nullable: true
           example: 50
-        specialization:
-          $ref: '#/components/schemas/SpecializationSummary' # استخدام الملخص
-        resources:
+        specialization: # هنا المشكلة المحتملة، إذا كان SpecializationSummary غير صحيح
+          $ref: '#/components/schemas/SpecializationSummary'
+        resources: # هنا المشكلة المحتملة، إذا كان CourseMaterial غير صحيح
           type: array
           items:
             $ref: '#/components/schemas/CourseMaterial' # استخدام التعريف الكامل للمورد
@@ -468,7 +448,7 @@ components:
         instructors: # بما أنك لا تربط المدرسين مباشرة بالمقررات، قد يكون هذا فارغًا []
           type: array
           items:
-            $ref: '#/components/schemas/InstructorSummary'
+            $ref: '#/components/schemas/InstructorSummary' # هنا المشكلة المحتملة، إذا كان InstructorSummary غير صحيح
           example: [] # مثال لمصفوفة فارغة لعدم وجود ربط مباشر
         created_at:
           type: string
@@ -517,8 +497,8 @@ components:
         is_active:
           type: boolean
           example: true
-        faculty:
-          $ref: '#/components/schemas/FacultySummary' # استخدام الملخص
+        faculty: # هنا المشكلة المحتملة، إذا كان FacultySummary غير صحيح
+          $ref: '#/components/schemas/FacultySummary'
         supervised_projects: # هنا سيكون لدينا قائمة بمشاريع متعددة
           type: array
           items:
@@ -596,11 +576,11 @@ components:
           type: string
           nullable: true
           example: "دليل الطالب, لارافيل, تطبيق موبايل, فلاتر"
-        specialization:
-          $ref: '#/components/schemas/SpecializationSummary' # استخدام الملخص
-        supervisor:
-          $ref: '#/components/schemas/InstructorSummary' # استخدام الملخص
-          nullable: true # المشرف يمكن أن يكون null
+        specialization: # هنا المشكلة المحتملة، إذا كان يشير إلى SpecializationSummary غير صحيح
+          $ref: '#/components/schemas/SpecializationSummary'
+        supervisor: # هنا المشكلة المحتملة، إذا كان يشير إلى InstructorSummary غير صحيح
+          $ref: '#/components/schemas/InstructorSummary'
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -642,8 +622,8 @@ components:
           type: string
           nullable: true
           example: "مخابر" # قاعات, مرافق جامعية
-        faculty:
-          $ref: '#/components/schemas/FacultySummary' # استخدام الملخص
+        faculty: # هنا المشكلة المحتملة، إذا كان FacultySummary غير صحيح
+          $ref: '#/components/schemas/FacultySummary'
           nullable: true
         uploaded_by: # AdminUser مبسط
           type: object
@@ -654,6 +634,7 @@ components:
             name_ar:
               type: string
               example: "المدير العام"
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -723,8 +704,8 @@ components:
           example: "نادي البرمجة بالتعاون مع قسم هندسة البرمجيات"
         status:
           $ref: '#/components/schemas/EventStatusEnum'
-        organizing_faculty:
-          $ref: '#/components/schemas/FacultySummary' # استخدام الملخص
+        organizing_faculty: # هنا المشكلة المحتملة، إذا كان FacultySummary غير صحيح
+          $ref: '#/components/schemas/FacultySummary'
           nullable: true
         is_registered_by_current_user: # يظهر فقط للطالب المسجل
           type: boolean
@@ -745,7 +726,24 @@ components:
           format: date-time
           example: "2024-05-17T12:00:00Z"
 
-    Notification: # التعريف الكامل
+
+
+
+    EventSummary: # <<-- التعريف الجديد (إذا لم يكن موجودًا)
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        title_ar:
+          type: string
+          example: "ورشة عمل فلاتر"
+        event_start_datetime: # مثال لحقل إضافي قد يكون مفيدًا في الملخص
+          type: string
+          format: date-time
+          example: "2024-06-15T09:00:00Z"
+          
+    Notification:
       type: object
       properties:
         id:
@@ -793,7 +791,7 @@ components:
             name_ar:
               type: string
               example: "مدير المحتوى"
-          nullable: true # يمكن أن يكون null إذا لم يتم تحديد المرسل بوضوح
+          nullable: true
         is_read_by_current_user: # يظهر فقط للطالب المسجل
           type: boolean
           example: false
@@ -908,7 +906,7 @@ components:
         current_password:
           type: string
           format: password
-          example: "password" # الكلمة القديمة (نص عادي)
+          example: "password" # الكلمة القديمة التي يعرفها الطالب
         password:
           type: string
           format: password
@@ -1349,6 +1347,7 @@ paths:
                   updated_at: "2024-03-15T10:00:00.000000Z"
         '404':
           description: المقرر غير موجود
+
   /courses/{courseId}/enroll:
     post:
       tags:
@@ -1367,13 +1366,13 @@ paths:
             example: 101
       requestBody:
         description: البيانات الإضافية لطلب التسجيل في المقرر (إذا وجدت)
-        required: false # إذا كان جسم الطلب يمكن أن يكون فارغًا
+        required: false
         content:
           application/json:
             schema:
-              type: object # الجسم هو من نوع object
-              # تم إزالة المفتاح properties: لأنه لا توجد حقول إلزامية أو غير إلزامية في الجسم حالياً
-            example: {} # مثال لجسم طلب فارغ (يمكنك تركه أو إزالته)
+              type: object
+              properties: {} # <-- هنا يجب أن تكون الخصائص التابعة للـ Object
+            example: {}
       responses:
         '201':
           description: تم تسجيل الطالب بنجاح في المقرر
@@ -1386,18 +1385,20 @@ paths:
                     type: string
                     example: "Successfully enrolled in the course."
                   enrollment:
-                    $ref: '#/components/schemas/StudentCourseEnrollment' # تفاصيل سجل التسجيل الجديد
+                    $ref: '#/components/schemas/StudentCourseEnrollment'
               example:
                 message: "Successfully enrolled in the course."
                 enrollment:
                   id: 101
-                  event_id: 101 # ID الفعالية (خطأ في النسخ، يجب أن يكون course_id)
-                  event_title_ar: "مقدمة في البرمجة" # اسم المقرر
+                  course_id: 101
+                  course_name_ar: "مقدمة في البرمجة"
                   student_id: 1001
                   student_name_ar: "أحمد محمد"
                   registration_datetime: "2024-06-01T10:30:00Z"
-                  status: "enrolled" # الحالة هي مسجل مباشرة
-                  attended: false
+                  semester_enrolled: "الخريف 2024"
+                  status: "enrolled"
+                  grade: null
+                  completion_date: null
                   notes: null
                   created_at: "2024-06-01T10:30:00Z"
                   updated_at: "2024-06-01T10:30:00Z"
@@ -1412,7 +1413,7 @@ paths:
                     type: string
                     example: "This course is not currently available for enrollment."
         '401':
-          description: غير مصرح به (الطالب لم يسجل دخوله)
+          description: غير مصرح به (الطالب لم يسجل دخوله أو التوكن غير صحيح)
         '404':
           description: المقرر غير موجود
         '409':

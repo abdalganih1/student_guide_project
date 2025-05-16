@@ -25,15 +25,14 @@ class StudentCourseEnrollmentResource extends JsonResource
              // يمكنك جلب تفاصيل المقرر هنا إذا تم تحميل العلاقة
             'course' => new CourseResource($this->whenLoaded('course')), // افترض وجود CourseResource
 
-            'enrollment_date' => $this->enrollment_date->toIso8601String(),
+            // 'enrollment_date' => $this->enrollment_date->toIso8601String(),
             'semester_enrolled' => $this->semester_enrolled,
             'status' => $this->status,
             'grade' => $this->whenNotNull($this->grade), // يعرض فقط إذا لم يكن null
-            'completion_date' => $this->whenNotNull($this->completion_date)?->toDateString(), // يعرض كتاريخ فقط ويكون null إذا كان null
+            'completion_date' => $this->whenNotNull($this->completion_date ? $this->completion_date->toDateString() : null), 
             'notes' => $this->whenNotNull($this->notes), // يعرض فقط إذا لم يكن null
-
-            'created_at' => $this->created_at->toIso8601String(),
-            'updated_at' => $this->updated_at->toIso8601String(),
+            // 'created_at' => $this->created_at->toIso8601String(),
+            // 'updated_at' => $this->updated_at->toIso8601String(),
         ];
     }
 }
