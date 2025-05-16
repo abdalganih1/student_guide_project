@@ -31,7 +31,7 @@ class NotificationController extends Controller
         return view('admin.notifications.create', compact('courses', 'events'));
     }
 
-    public function store(Request $request)
+public function store(Request $request) // يمكنك إنشاء FormRequest لهذا لاحقًا إذا أردت
     {
         $validatedData = $request->validate([
             'title_ar' => 'required|string|max:255',
@@ -42,28 +42,45 @@ class NotificationController extends Controller
             'target_audience_type' => 'required|string|in:all,course_specific,custom_group,individual',
             'related_course_id' => 'nullable|required_if:target_audience_type,course_specific|exists:courses,id',
             'related_event_id' => 'nullable|exists:events,id',
-            'publish_datetime' => 'required|date_format:Y-m-d H:i:s', // أو 'date' فقط
-            'expiry_datetime' => 'nullable|date_format:Y-m-d H:i:s|after:publish_datetime',
+            'publish_datetime' => 'required|date_format:Y-m-d\TH:i', // <--- تعديل هنا
+            'expiry_datetime' => 'nullable|date_format:Y-m-d\TH:i|after_or_equal:publish_datetime', // <--- تعديل هنا و after_or_equal
             'student_ids' => 'nullable|required_if:target_audience_type,custom_group|required_if:target_audience_type,individual|array',
-            'student_ids.*' => 'exists:students,id', // تحقق من وجود كل طالب
+            'student_ids.*' => 'exists:students,id',
+        ], [
+            // يمكنك إضافة رسائل خطأ مخصصة هنا
+            'publish_datetime.date_format' => 'صيغة تاريخ ووقت النشر غير صحيحة (مثال: 2024-12-31T14:30).',
+            'expiry_datetime.date_format' => 'صيغة تاريخ ووقت انتهاء الصلاحية غير صحيحة (مثال: 2024-12-31T14:30).',
+            'expiry_datetime.after_or_equal' => 'تاريخ انتهاء الصلاحية يجب أن يكون بعد أو يساوي تاريخ النشر.',
         ]);
 
         $admin = AdminAuth::guard('admin_web')->user();
         $validatedData['sent_by_admin_id'] = $admin->id;
 
+        // تحويل التنسيق قبل الحفظ في قاعدة البيانات إذا كان عمود قاعدة البيانات هو datetime (Y-m-d H:i:s)
+        // Laravel عادةً ما يتعامل مع هذا بشكل جيد عند الحفظ إذا كان الحقل في $casts كـ 'datetime'
+        // ولكن للتأكيد، يمكنك القيام بذلك:
+        // if (isset($validatedData['publish_datetime'])) {
+        //     $validatedData['publish_datetime'] = str_replace('T', ' ', $validatedData['publish_datetime']) . ':00';
+        // }
+        // if (isset($validatedData['expiry_datetime']) && $validatedData['expiry_datetime']) {
+        //     $validatedData['expiry_datetime'] = str_replace('T', ' ', $validatedData['expiry_datetime']) . ':00';
+        // }
+
+
         $notification = Notification::create($validatedData);
 
-        // إذا كان الاستهداف فرديًا أو لمجموعة مخصصة، قم بإنشاء سجلات في NotificationRecipients
         if (in_array($validatedData['target_audience_type'], ['custom_group', 'individual']) && !empty($validatedData['student_ids'])) {
             foreach ($validatedData['student_ids'] as $studentId) {
-                $notification->recipients()->attach($studentId); // يفترض أن علاقة recipients هي belongsToMany
+                // استخدام create بدلاً من attach إذا كان NotificationRecipients نموذجًا عاديًا
+                // وكان لديك fillable مناسب فيه.
+                // أو إذا كانت علاقة many-to-many:
+                $notification->recipients()->attach($studentId);
             }
         }
 
-        // يمكنك هنا إضافة منطق لإرسال الإشعار الفعلي (مثل push notifications) إذا لزم الأمر
-
         return redirect()->route('admin.notifications.index')->with('success', 'تم إرسال/جدولة التنبيه بنجاح.');
     }
+
 
     public function show(Notification $notification)
     {

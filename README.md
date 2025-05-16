@@ -12645,5 +12645,145 @@ protected function prepareForValidation()
 
 ---
 
+الخطأ `The publish datetime field must match the format Y-m-d H:i:s.` مشابه للخطأ الذي واجهناه سابقًا مع حقول التاريخ والوقت في الفعاليات.
+
+**السبب:**
+
+حقل الإدخال `type="datetime-local"` في HTML (الذي تستخدمه لـ `publish_datetime` و `expiry_datetime` في نموذج إنشاء/تعديل التنبيهات) يُرسل البيانات بتنسيق `YYYY-MM-DDTHH:MM`.
+
+بينما قاعدة التحقق من الصحة في `NotificationController` (داخل دالة `store`) تتوقع التنسيق `Y-m-d H:i:s`:
+
+```php
+// في NotificationController -> store()
+$validatedData = $request->validate([
+    // ...
+    'publish_datetime' => 'required|date_format:Y-m-d H:i:s', // يتوقع ثواني ومسافة بدلاً من T
+    'expiry_datetime' => 'nullable|date_format:Y-m-d H:i:s|after:publish_datetime',
+    // ...
+]);
+```
+
+**الحل:**
+
+نفس الخيارات التي ناقشناها للفعاليات تنطبق هنا. **الخيار الأسهل هو تعديل قاعدة `date_format` في المتحكم لتطابق تنسيق `datetime-local`.**
+
+**تعديل `app/Http/Controllers/Admin/NotificationController.php` (دالة `store`):**
+
+```php
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\Notification;
+use App\Models\Student;
+use App\Models\Course;
+use App\Models\Event;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth as AdminAuth; // غيرت الاسم المستعار لتجنب التعارض إذا كنت تستخدم Auth العادي في مكان آخر
+
+class NotificationController extends Controller
+{
+    public function __construct()
+    {
+        $this->middleware('auth:admin_web');
+    }
+
+    public function index()
+    {
+        $notifications = Notification::with('sentByAdmin')->latest()->paginate(15);
+        return view('admin.notifications.index', compact('notifications'));
+    }
+
+    public function create()
+    {
+        $courses = Course::orderBy('name_ar')->get();
+        $events = Event::orderBy('title_ar')->get();
+        return view('admin.notifications.create', compact('courses', 'events'));
+    }
+
+    public function store(Request $request) // يمكنك إنشاء FormRequest لهذا لاحقًا إذا أردت
+    {
+        $validatedData = $request->validate([
+            'title_ar' => 'required|string|max:255',
+            'title_en' => 'nullable|string|max:255',
+            'body_ar' => 'required|string',
+            'body_en' => 'nullable|string',
+            'type' => 'required|string|max:50',
+            'target_audience_type' => 'required|string|in:all,course_specific,custom_group,individual',
+            'related_course_id' => 'nullable|required_if:target_audience_type,course_specific|exists:courses,id',
+            'related_event_id' => 'nullable|exists:events,id',
+            'publish_datetime' => 'required|date_format:Y-m-d\TH:i', // <--- تعديل هنا
+            'expiry_datetime' => 'nullable|date_format:Y-m-d\TH:i|after_or_equal:publish_datetime', // <--- تعديل هنا و after_or_equal
+            'student_ids' => 'nullable|required_if:target_audience_type,custom_group|required_if:target_audience_type,individual|array',
+            'student_ids.*' => 'exists:students,id',
+        ], [
+            // يمكنك إضافة رسائل خطأ مخصصة هنا
+            'publish_datetime.date_format' => 'صيغة تاريخ ووقت النشر غير صحيحة (مثال: 2024-12-31T14:30).',
+            'expiry_datetime.date_format' => 'صيغة تاريخ ووقت انتهاء الصلاحية غير صحيحة (مثال: 2024-12-31T14:30).',
+            'expiry_datetime.after_or_equal' => 'تاريخ انتهاء الصلاحية يجب أن يكون بعد أو يساوي تاريخ النشر.',
+        ]);
+
+        $admin = AdminAuth::guard('admin_web')->user();
+        $validatedData['sent_by_admin_id'] = $admin->id;
+
+        // تحويل التنسيق قبل الحفظ في قاعدة البيانات إذا كان عمود قاعدة البيانات هو datetime (Y-m-d H:i:s)
+        // Laravel عادةً ما يتعامل مع هذا بشكل جيد عند الحفظ إذا كان الحقل في $casts كـ 'datetime'
+        // ولكن للتأكيد، يمكنك القيام بذلك:
+        // if (isset($validatedData['publish_datetime'])) {
+        //     $validatedData['publish_datetime'] = str_replace('T', ' ', $validatedData['publish_datetime']) . ':00';
+        // }
+        // if (isset($validatedData['expiry_datetime']) && $validatedData['expiry_datetime']) {
+        //     $validatedData['expiry_datetime'] = str_replace('T', ' ', $validatedData['expiry_datetime']) . ':00';
+        // }
+
+
+        $notification = Notification::create($validatedData);
+
+        if (in_array($validatedData['target_audience_type'], ['custom_group', 'individual']) && !empty($validatedData['student_ids'])) {
+            foreach ($validatedData['student_ids'] as $studentId) {
+                // استخدام create بدلاً من attach إذا كان NotificationRecipients نموذجًا عاديًا
+                // وكان لديك fillable مناسب فيه.
+                // أو إذا كانت علاقة many-to-many:
+                $notification->recipients()->attach($studentId);
+            }
+        }
+
+        return redirect()->route('admin.notifications.index')->with('success', 'تم إرسال/جدولة التنبيه بنجاح.');
+    }
+
+    public function show(Notification $notification)
+    {
+        $notification->load('sentByAdmin', 'relatedCourse', 'relatedEvent', 'recipients');
+        return view('admin.notifications.show', compact('notification'));
+    }
+}
+```
+
+**شرح التعديلات في `NotificationController`:**
+
+1.  **`date_format:Y-m-d\TH:i`:** تم تغيير قاعدة التحقق من الصحة لـ `publish_datetime` و `expiry_datetime` لتقبل التنسيق الذي يرسله حقل `datetime-local` (بما في ذلك حرف `T`).
+2.  **`after_or_equal:publish_datetime`:** تم تعديل قاعدة `expiry_datetime` لتكون `after_or_equal` بدلاً من `after` فقط للسماح بأن يكون تاريخ انتهاء الصلاحية في نفس لحظة النشر إذا لزم الأمر (على الرغم من أنه قد لا يكون منطقيًا دائمًا).
+3.  **تحويل التنسيق قبل الحفظ (اختياري ولكن قد يكون مفيدًا):**
+    *   إذا كان عمود قاعدة البيانات لديك من نوع `DATETIME` ويتوقع تنسيق `Y-m-d H:i:s` (مع الثواني)، فقد تحتاج إلى تحويل القيمة قبل حفظها.
+    *   عادةً، إذا كان الحقل مُعرَّفًا في مصفوفة `$casts` لنموذج `Notification` كـ `'publish_datetime' => 'datetime'` و `'expiry_datetime' => 'datetime'`، فإن Eloquent سيتعامل مع تحويل التنسيقات بشكل جيد عند الحفظ.
+    *   الكود المُعلَّق `# if (isset($validatedData['publish_datetime'])) ...` يوضح كيف يمكنك القيام بالتحويل يدويًا إذا لزم الأمر (بإضافة `:00` للثواني واستبدال `T` بمسافة). **لكن جرب أولاً بدون هذا التحويل اليدوي**، فالأغلب أن Eloquent سيتعامل معه.
+
+**مراجعة ملف `resources/views/admin/notifications/create.blade.php` (عند عرض القيم القديمة):**
+
+عند عرض القيم القديمة `old()` في حالة فشل التحقق من الصحة، يجب أن يكون التنسيق أيضًا متوافقًا مع ما يتوقعه `datetime-local`.
+
+```html
+{{-- في create.blade.php --}}
+<input type="datetime-local" class="form-control @error('publish_datetime') is-invalid @enderror" id="publish_datetime" name="publish_datetime" value="{{ old('publish_datetime', now()->format('Y-m-d\TH:i')) }}" required>
+
+<input type="datetime-local" class="form-control @error('expiry_datetime') is-invalid @enderror" id="expiry_datetime" name="expiry_datetime" value="{{ old('expiry_datetime') }}">
+```
+التنسيق `now()->format('Y-m-d\TH:i')` للقيمة الافتراضية صحيح.
+
+بعد إجراء هذه التعديلات على قواعد التحقق من الصحة في `NotificationController`، يجب أن يتم قبول التنسيق الذي يرسله حقل `datetime-local`، وسيختفي الخطأ.
+
+---
+
 
 
