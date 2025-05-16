@@ -12784,6 +12784,202 @@ class NotificationController extends Controller
 بعد إجراء هذه التعديلات على قواعد التحقق من الصحة في `NotificationController`، يجب أن يتم قبول التنسيق الذي يرسله حقل `datetime-local`، وسيختفي الخطأ.
 
 ---
+بالتأكيد، سنقوم بتصميم `EventCollection` ثم نناقش الأمور الأخرى التي قد تحتاجها.
+
+**1. تصميم `app/Http/Resources/EventCollection.php`**
+
+```php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\ResourceCollection;
+
+class EventCollection extends ResourceCollection
+{
+    /**
+     * The "data" wrapper that should be applied.
+     *
+     * @var string|null
+     */
+    public static $wrap = 'data'; // أو null إذا كنت لا تريد غلاف 'data'
+
+    /**
+     * Transform the resource collection into an array.
+     *
+     * @return array<int|string, mixed>
+     */
+    public function toArray(Request $request): array
+    {
+        return [
+            'data' => EventResource::collection($this->collection),
+            // يمكنك تضمين معلومات التصفح (pagination) هنا إذا كنت تستخدمها في المتحكم
+            // سأضيف مثالاً عامًا، يمكنك تكييفه إذا كنت تستخدم paginate() في دالة index
+            $this->mergeWhen($this->resource instanceof \Illuminate\Pagination\AbstractPaginator, [
+                'links' => [
+                    'first' => $this->url(1),
+                    'last' => $this->url($this->lastPage()),
+                    'prev' => $this->previousPageUrl(),
+                    'next' => $this->nextPageUrl(),
+                ],
+                'meta' => [
+                    'current_page' => $this->currentPage(),
+                    'from' => $this->firstItem(),
+                    'last_page' => $this->lastPage(),
+                    'path' => $this->path(),
+                    'per_page' => $this->perPage(),
+                    'to' => $this->lastItem(),
+                    'total' => $this->total(),
+                ],
+            ])
+        ];
+    }
+
+    /**
+     * Get additional data that should be returned with the resource array.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return array
+     */
+    public function with(Request $request)
+    {
+        return [
+            'meta' => [
+                'source' => 'University Events API',
+                'timestamp' => now()->toIso8601String(),
+            ],
+        ];
+    }
+}
+```
+
+**شرح `EventCollection.php`:**
+
+*   **`public static $wrap = 'data';`**: هذا يحدد أن مجموعة النتائج سيتم تغليفها داخل مفتاح `data` في استجابة JSON. يمكنك تعيينه إلى `null` إذا كنت لا تريد هذا الغلاف.
+*   **`toArray(Request $request): array`**:
+    *   `'data' => EventResource::collection($this->collection)`: هذا هو الجزء الأساسي. يقوم بتحويل كل عنصر (`Event`) في المجموعة (`$this->collection`) باستخدام `EventResource` الذي قمنا بتصميمه سابقًا. هذا يضمن أن كل فعالية في القائمة يتم تنسيقها بنفس الطريقة التي يتم بها تنسيق فعالية واحدة عند عرضها عبر `EventResource`.
+    *   **`$this->mergeWhen(...)`**: هذا الجزء اختياري ويُستخدم فقط إذا كنت تستخدم التصفح (`paginate()`) في دالة `index` بمتحكم `EventController`. إذا لم تكن تستخدم التصفح (مثل استخدام `get()` حاليًا)، يمكنك إزالة هذا الجزء بأكمله. إذا استخدمت `paginate()`, فإن هذا الكود سيضيف معلومات وروابط التصفح إلى استجابة الـ API.
+*   **`with(Request $request)`**: هذه الدالة اختيارية وتسمح لك بإضافة بيانات وصفية (meta-data) إضافية إلى استجابة JSON بأكملها (وليس لكل عنصر على حدة). في هذا المثال، أضفت مصدر الـ API وطابع زمني.
+
+**ملاحظة على التصفح في `EventController`:**
+
+حالياً، دالة `index` في `Api/EventController.php` تستخدم `->get()`:
+
+```php
+public function index()
+{
+    $events = Event::whereIn('status', ['scheduled', 'ongoing'])
+                   ->orderBy('event_start_datetime', 'asc')
+                   ->get(); // <--- هنا
+    return new EventCollection($events);
+}
+```
+
+إذا كنت تتوقع عددًا كبيرًا من الفعاليات، فمن الأفضل استخدام التصفح:
+
+```php
+public function index(Request $request) // أضف Request إذا كنت ستأخذ عدد العناصر لكل صفحة من الطلب
+{
+    $perPage = $request->input('per_page', 15); // عدد العناصر لكل صفحة، الافتراضي 15
+    $events = Event::whereIn('status', ['scheduled', 'ongoing'])
+                   ->orderBy('event_start_datetime', 'asc')
+                   ->paginate($perPage); // <--- تغيير هنا
+    return new EventCollection($events);
+}
+```
+إذا قمت بهذا التغيير، فإن قسم `mergeWhen` في `EventCollection` سيعمل بشكل صحيح لإضافة معلومات التصفح.
+
+---
+
+**هل هناك أمور أخرى يجب بناؤها بخصوص `EventController` للـ API؟**
+
+بناءً على الكود الحالي للمتحكم والـ Resource، إليك بعض الأمور التي قد تحتاج إلى التفكير فيها أو بنائها:
+
+1.  **`EventResource.php` (مراجعة وتأكيد):**
+    تأكد من أن `app/Http/Resources/EventResource.php` الذي صممناه سابقًا يعرض جميع المعلومات التي تريدها لكل فعالية عندما يتم طلبها بشكل فردي (`/api/events/{event}`) أو كجزء من المجموعة (`/api/events`). لقد قمنا بتضمين معلومات مثل `is_registered_by_current_user` و `current_user_registration_status`.
+
+2.  **Form Request لـ `register` (اختياري):**
+    في دالة `register`، لديك حاليًا:
+    ```php
+    $request->validate([
+        // 'motivation' => 'nullable|string|max:1000',
+    ]);
+    ```
+    إذا كان نموذج التسجيل في الفعالية من طرف تطبيق الموبايل سيحتوي على حقول إضافية (مثل حقل "الدافع للحضور" أو أي معلومات أخرى)، فمن الأفضل إنشاء Form Request مخصص لهذه العملية بدلاً من استخدام `$request->validate()` مباشرة في المتحكم.
+    ```bash
+    php artisan make:request Api/EventRegistrationApiRequest
+    ```
+    ثم في `Api/EventRegistrationApiRequest.php`:
+    ```php
+    <?php
+    namespace App\Http\Requests\Api;
+    use Illuminate\Foundation\Http\FormRequest;
+    use Illuminate\Support\Facades\Auth;
+
+    class EventRegistrationApiRequest extends FormRequest {
+        public function authorize(): bool { return Auth::guard('sanctum')->check(); }
+        public function rules(): array {
+            return [
+                'motivation' => 'nullable|string|max:1000',
+                // أي حقول أخرى مطلوبة من تطبيق الموبايل
+            ];
+        }
+    }
+    ```
+    وفي `EventController -> register()`:
+    ```php
+    public function register(EventRegistrationApiRequest $request, Event $event)
+    {
+        $student = Auth::user();
+        $validatedData = $request->validated(); // جلب البيانات المتحقق منها
+
+        // ... (بقية منطق التسجيل) ...
+
+        $registration = StudentEventRegistration::create([
+            'student_id' => $student->id,
+            'event_id' => $event->id,
+            'registration_datetime' => now(),
+            'status' => 'pending_approval',
+            'notes' => $validatedData['motivation'] ?? null, // استخدام القيمة من validatedData
+        ]);
+        // ...
+    }
+    ```
+
+3.  **إشعارات (Notifications):**
+    *   **إشعار للمدير عند طلب تسجيل جديد:** كما ذكرت في تعليق المتحكم، قد ترغب في إرسال إشعار (عبر البريد الإلكتروني أو نظام الإشعارات الداخلي) إلى المسؤولين عند تقديم طالب لطلب تسجيل جديد في فعالية.
+    *   **إشعار للطالب عند الموافقة/الرفض:** بعد أن يقوم المدير بالموافقة أو الرفض على طلب التسجيل (من خلال لوحة التحكم)، يجب إرسال إشعار للطالب لإعلامه بحالة طلبه. هذا سيتم تنفيذه في `Admin/EventRegistrationController` (دوال `approve` و `reject`).
+
+4.  **API Resource لـ `StudentEventRegistration` (اختياري):**
+    عندما يقوم الطالب بالتسجيل بنجاح، دالة `register` ترجع:
+    ```json
+    {
+        "message": "Your registration request has been submitted successfully. It is pending approval.",
+        "registration": { /* كائن StudentEventRegistration كامل */ }
+    }
+    ```
+    إذا كنت تريد تنسيقًا محددًا لكائن `registration` هذا، يمكنك إنشاء API Resource له:
+    ```bash
+    php artisan make:resource StudentEventRegistrationResource
+    ```
+    ثم استخدامه في `EventController`:
+    ```php
+    // في دالة register
+    return response()->json([
+        'message' => 'Your registration request has been submitted successfully. It is pending approval.',
+        'registration' => new StudentEventRegistrationResource($registration),
+    ], 201);
+    ```
+
+5.  **سياسات الصلاحيات (Policies) - متقدم:**
+    إذا كان لديك منطق صلاحيات معقد (مثلاً، هل يمكن لهذا الطالب المحدد التسجيل في هذه الفعالية المحددة بناءً على تخصصه أو سنته الدراسية؟)، يمكنك استخدام Policies لتنظيم هذا المنطق.
+
+6.  **معالجة الأخطاء بشكل أفضل:**
+    الاستجابات الحالية للأخطاء (مثل `400 Bad Request`, `409 Conflict`) جيدة، ولكن يمكنك تخصيص رسائل الخطأ بشكل أكبر أو استخدام تنسيق استجابة خطأ موحد عبر الـ API الخاص بك.
+
+بشكل عام، الكود الحالي لـ `EventController` للـ API يوفر الوظائف الأساسية المطلوبة. `EventCollection` الآن جاهز. النقاط الإضافية هي لتحسين وتوسيع هذه الوظائف.
+---
 
 
 

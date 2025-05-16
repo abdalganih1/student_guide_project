@@ -9,19 +9,22 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Resources\EventResource;
 use App\Http\Resources\EventCollection;
+use App\Http\Requests\Api\EventRegistrationApiRequest;
+use App\Http\Resources\StudentEventRegistrationResource;
 
 class EventController extends Controller
 {
     /**
      * عرض الفعاليات والمسابقات المتاحة (المجدولة أو الجارية).
      */
-    public function index()
-    {
-        $events = Event::whereIn('status', ['scheduled', 'ongoing'])
-                       ->orderBy('event_start_datetime', 'asc')
-                       ->get();
-        return new EventCollection($events);
-    }
+    public function index(Request $request) // أضف Request إذا كنت ستأخذ عدد العناصر لكل صفحة من الطلب
+{
+    $perPage = $request->input('per_page', 15); // عدد العناصر لكل صفحة، الافتراضي 15
+    $events = Event::whereIn('status', ['scheduled', 'ongoing'])
+                   ->orderBy('event_start_datetime', 'asc')
+                   ->paginate($perPage); // <--- تغيير هنا
+    return new EventCollection($events);
+}
 
     /**
      * عرض تفاصيل فعالية معينة.
@@ -36,9 +39,10 @@ class EventController extends Controller
      * تقديم طلب تسجيل لفعالية/مسابقة.
      * "الواجهة يوفر نموذجًا موحدًا لـ "طلب" التسجيل، القرار النهائي للتسجيل يتم عبر الإدارة"
      */
-    public function register(Request $request, Event $event)
+    public function register(EventRegistrationApiRequest $request, Event $event)
     {
         $student = Auth::user(); // الطالب المسجل دخوله حاليًا
+        $validatedData = $request->validated(); // جلب البيانات المتحقق منها
 
         $request->validate([
             // يمكنك إضافة حقول إضافية إذا كان نموذج التسجيل يتطلبها
@@ -74,15 +78,16 @@ class EventController extends Controller
             'student_id' => $student->id,
             'event_id' => $event->id,
             'registration_datetime' => now(),
-            'status' => 'pending_approval', // أو 'registered' إذا كان التسجيل تلقائيًا مبدئيًا
-            // 'notes' => $request->input('motivation'), // إذا كان هناك حقل للملاحظات
+            'status' => 'pending_approval',
+            'notes' => $validatedData['motivation'] ?? null, // استخدام القيمة من validatedData
         ]);
 
         // يمكنك إرسال إشعار للمدير بمراجعة الطلب هنا (اختياري)
 
+        // في دالة register
         return response()->json([
             'message' => 'Your registration request has been submitted successfully. It is pending approval.',
-            'registration' => $registration,
+            'registration' => new StudentEventRegistrationResource($registration),
         ], 201);
     }
 }
