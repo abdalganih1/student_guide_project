@@ -37,4 +37,17 @@ class UniversityFacilityController extends Controller
     {
         return new UniversityMediaResource($universityMedia);
     }
+    // في ApiUniversityFacilityController.php
+    public function getFacilitiesByCategory(Request $request, string $categorySlug)
+    {
+        $query = UniversityMedia::where('category', $categorySlug);
+
+        if ($request->has('media_type')) {
+            $query->where('media_type', $request->media_type);
+        }
+        // أضف المزيد من الفلاتر إذا لزم الأمر
+
+        $mediaItems = $query->orderBy('created_at', 'desc')->paginate(15); // استخدام paginate
+        return new UniversityMediaCollection($mediaItems);
+    }
 }

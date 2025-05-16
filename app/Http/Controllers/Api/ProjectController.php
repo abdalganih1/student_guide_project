@@ -49,4 +49,32 @@ class ProjectController extends Controller
         $project->load(['specialization', 'supervisor']);
         return new ProjectResource($project);
     }
+    // في ApiProjectController.php
+    public function filterProjects(Request $request) // أو عدّل دالة index لتقبل كل هذه البارامترات
+    {
+        $query = Project::query()->with(['specialization', 'supervisor']);
+
+        if ($request->filled('specialization_id')) {
+            $query->where('specialization_id', $request->specialization_id);
+        }
+        if ($request->filled('year')) {
+            $query->where('year', $request->year);
+        }
+        if ($request->filled('semester')) {
+            $query->where('semester', $request->semester);
+        }
+        if ($request->filled('keywords')) {
+            $keywords = $request->keywords;
+            $query->where(function ($q) use ($keywords) {
+                $q->where('title_ar', 'like', "%{$keywords}%")
+                ->orWhere('title_en', 'like', "%{$keywords}%")
+                ->orWhere('student_names', 'like', "%{$keywords}%") // إذا كان student_names نصيًا
+                ->orWhere('keywords', 'like', "%{$keywords}%");
+            });
+        }
+        // أضف المزيد من الفلاتر حسب الحاجة
+
+        $projects = $query->orderBy('year', 'desc')->orderBy('semester', 'asc')->paginate(15); // استخدام paginate
+        return new ProjectCollection($projects);
+    }
 }

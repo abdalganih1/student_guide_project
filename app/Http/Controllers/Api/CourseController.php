@@ -56,4 +56,19 @@ class CourseController extends Controller
         $courses = $specialization->courses()->get(); // جلب المقررات المنشورة فقط
         return new CourseCollection($courses);
     }
+    // في ApiCourseController.php
+    public function getCoursesByYearLevel(Request $request, int $yearLevel)
+    {
+        $query = Course::where('year_level', $yearLevel);
+
+        // يمكنك إضافة فلاتر إضافية هنا إذا أردت، مثل الاختصاص
+        if ($request->has('specialization_id')) {
+            $query->where('specialization_id', $request->specialization_id);
+        }
+        // يمكنك أيضًا إضافة شروط للتحقق من أن المقرر متاح للعرض
+        // $query->where('is_enrollable', true); // أو أي شروط أخرى
+
+        $courses = $query->with('specialization')->get();
+        return new CourseCollection($courses);
+    }
 }

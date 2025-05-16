@@ -12980,6 +12980,552 @@ public function index(Request $request) // أضف Request إذا كنت ستأخ
 
 بشكل عام، الكود الحالي لـ `EventController` للـ API يوفر الوظائف الأساسية المطلوبة. `EventCollection` الآن جاهز. النقاط الإضافية هي لتحسين وتوسيع هذه الوظائف.
 ---
+بالتأكيد، دعنا نكتب محتوى ملفي `StudentEventRegistrationResource` و `EventRegistrationApiRequest`.
 
+**1. `app/Http/Resources/StudentEventRegistrationResource.php`**
+
+هذا الـ Resource سيستخدم لتنسيق بيانات تسجيل الطالب في فعالية عندما يتم إرجاعها عبر الـ API (على سبيل المثال، بعد أن يقوم الطالب بالتسجيل بنجاح).
+
+**إنشاء الملف (إذا لم تكن قد أنشأته):**
+```bash
+php artisan make:resource StudentEventRegistrationResource
+```
+
+**محتوى `app/Http/Resources/StudentEventRegistrationResource.php`:**
+
+```php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class StudentEventRegistrationResource extends JsonResource
+{
+    /**
+     * Transform the resource into an array.
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray(Request $request): array
+    {
+        // $this->resource يشير إلى كائن StudentEventRegistration
+        return [
+            'id' => $this->id,
+            'event_id' => $this->event_id,
+            'event_title_ar' => $this->whenLoaded('event', $this->event->title_ar, null), // عرض عنوان الفعالية إذا تم تحميل العلاقة
+            'student_id' => $this->student_id,
+            'student_name_ar' => $this->whenLoaded('student', $this->student->full_name_ar, null), // عرض اسم الطالب إذا تم تحميل العلاقة
+            'registration_datetime' => $this->registration_datetime->toIso8601String(),
+            'status' => $this->status, // مثل: pending_approval, registered, rejected
+            'attended' => $this->whenNotNull($this->attended), // يعرض فقط إذا لم يكن null
+            'notes' => $this->notes, // ملاحظات الطالب عند التسجيل (إذا وجدت)
+            'created_at' => $this->created_at->toIso8601String(),
+            'updated_at' => $this->updated_at->toIso8601String(),
+
+            // يمكنك إضافة المزيد من التفاصيل من الفعالية أو الطالب إذا لزم الأمر
+            // 'event_details' => new EventResource($this->whenLoaded('event')),
+            // 'student_details' => new StudentResource($this->whenLoaded('student')),
+        ];
+    }
+}
+```
+
+**شرح `StudentEventRegistrationResource.php`:**
+
+*   **`'id' => $this->id`**: معرّف سجل التسجيل نفسه.
+*   **`'event_id' => $this->event_id`**: معرّف الفعالية.
+*   **`'event_title_ar' => $this->whenLoaded('event', $this->event->title_ar, null)`**:
+    *   `whenLoaded('event', ...)`: هذا الشرط يعني أنه سيتم تضمين `event_title_ar` فقط إذا تم تحميل علاقة `event` مسبقًا مع كائن `StudentEventRegistration` (عبر `->load('event')` أو `->with('event')` في المتحكم).
+    *   `$this->event->title_ar`: يصل إلى عنوان الفعالية باللغة العربية.
+    *   `, null`: إذا لم يتم تحميل العلاقة، ستكون القيمة `null`.
+*   **`'student_id' => $this->student_id`**: معرّف الطالب.
+*   **`'student_name_ar' => $this->whenLoaded('student', $this->student->full_name_ar, null)`**: نفس منطق `event_title_ar` ولكن لاسم الطالب.
+*   **`'registration_datetime' => $this->registration_datetime->toIso8601String()`**: يعرض تاريخ التسجيل بتنسيق ISO 8601 القياسي للـ APIs.
+*   **`'status' => $this->status`**: حالة التسجيل الحالية.
+*   **`'attended' => $this->whenNotNull($this->attended)`**: يعرض قيمة حقل `attended` (الذي هو `boolean` أو `null`) فقط إذا لم تكن القيمة `null`.
+*   **`'notes' => $this->notes`**: أي ملاحظات قدمها الطالب عند التسجيل.
+*   **التعليقات (`'event_details'`, `'student_details'`):** إذا كنت تريد تضمين كائن الفعالية أو الطالب بالكامل (باستخدام الـ Resources الخاصة بهما)، يمكنك إلغاء التعليق عن هذه الأسطر والتأكد من تحميل العلاقات (`event` و `student`) في المتحكم قبل إرجاع هذا الـ Resource.
+
+---
+
+**2. `app/Http/Requests/Api/EventRegistrationApiRequest.php`**
+
+هذا الـ Form Request سيستخدم للتحقق من صحة البيانات المرسلة من تطبيق الموبايل عند طلب التسجيل في فعالية.
+
+**إنشاء الملف (إذا لم تكن قد أنشأته):**
+```bash
+php artisan make:request Api/EventRegistrationApiRequest
+```
+
+**محتوى `app/Http/Requests/Api/EventRegistrationApiRequest.php`:**
+
+```php
+<?php
+
+namespace App\Http\Requests\Api;
+
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Auth; // لاستخدامه في authorize
+
+class EventRegistrationApiRequest extends FormRequest
+{
+    /**
+     * Determine if the user is authorized to make this request.
+     *
+     * @return bool
+     */
+    public function authorize(): bool
+    {
+        // تأكد من أن المستخدم المسجل (الطالب) هو المصرح له بإجراء هذا الطلب
+        return Auth::guard('sanctum')->check();
+    }
+
+    /**
+     * Get the validation rules that apply to the request.
+     *
+     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+     */
+    public function rules(): array
+    {
+        return [
+            // الحقول التي قد يرسلها تطبيق الموبايل عند التسجيل في فعالية
+            // حاليًا، المتحكم لا يتوقع أي حقول إضافية إلزامية،
+            // لكن يمكنك إضافتها هنا إذا تغيرت المتطلبات.
+
+            // مثال: إذا كان هناك حقل "الدافع للحضور"
+            'motivation' => 'nullable|string|max:1000',
+
+            // مثال: إذا كان هناك أسئلة إضافية خاصة بالفعالية
+            // 'answers.question_1' => 'nullable|string|max:255',
+            // 'answers.question_2' => 'nullable|boolean',
+            // 'answers' => 'nullable|array', // إذا كانت الإجابات مجموعة
+        ];
+    }
+
+    /**
+     * Get custom messages for validator errors.
+     *
+     * @return array
+     */
+    public function messages(): array
+    {
+        return [
+            'motivation.string' => 'حقل الدافع يجب أن يكون نصًا.',
+            'motivation.max' => 'حقل الدافع يجب ألا يتجاوز 1000 حرف.',
+            // رسائل خطأ مخصصة للحقول الإضافية
+        ];
+    }
+
+    /**
+     * Get custom attributes for validator errors.
+     *
+     * @return array
+     */
+    public function attributes(): array
+    {
+        return [
+            'motivation' => 'الدافع للحضور',
+            // أسماء مخصصة للحقول الإضافية
+        ];
+    }
+}
+```
+
+**شرح `EventRegistrationApiRequest.php`:**
+
+*   **`authorize()`**: تتحقق مما إذا كان المستخدم الحالي (المصادق عليه عبر Sanctum) مصرحًا له بإجراء هذا الطلب. في هذه الحالة، يكفي التأكد من أنه طالب مسجل.
+*   **`rules()`**:
+    *   حالياً، المتحكم لا يتطلب أي بيانات إضافية في نص الطلب عند التسجيل في فعالية (فقط الـ `event_id` من المسار).
+    *   لقد أضفت مثالاً معلقًا لحقل `motivation`. إذا قررت أن تطبيق الموبايل يجب أن يرسل أي بيانات إضافية عند التسجيل (مثل الدافع للحضور، أو إجابات على أسئلة معينة)، يمكنك إضافة قواعد التحقق الخاصة بها هنا.
+    *   إذا لم تكن هناك أي بيانات إضافية متوقعة من نص الطلب، يمكن أن تكون مصفوفة `rules()` فارغة `return [];`.
+*   **`messages()` و `attributes()`**: دوال اختيارية لتخصيص رسائل الخطأ وأسماء الحقول في رسائل الخطأ.
+
+**كيفية استخدام `EventRegistrationApiRequest` في `Api/EventController.php`:**
+
+في دالة `register` بمتحكم `Api/EventController.php`، قم بتغيير `Request $request` إلى `EventRegistrationApiRequest $request`:
+
+```php
+// في app/Http/Controllers/Api/EventController.php
+
+// ... (استيراد الكلاسات الأخرى)
+use App\Http\Requests\Api\EventRegistrationApiRequest; // <--- استيراد هنا
+
+class EventController extends Controller
+{
+    // ... (دوال index و show)
+
+    public function register(EventRegistrationApiRequest $request, Event $event) // <--- تغيير هنا
+    {
+        $student = Auth::user();
+        $validatedData = $request->validated(); // جلب البيانات المتحقق منها (مثل motivation إذا أضفته)
+
+        // ... (بقية منطق التحقق من الفعالية والتسجيل المسبق والسعة) ...
+
+        $registration = StudentEventRegistration::create([
+            'student_id' => $student->id,
+            'event_id' => $event->id,
+            'registration_datetime' => now(),
+            'status' => 'pending_approval',
+            'notes' => $validatedData['motivation'] ?? null, // استخدام القيمة من validatedData
+        ]);
+
+        // ... (بقية الكود) ...
+        return response()->json([
+            'message' => 'Your registration request has been submitted successfully. It is pending approval.',
+            'registration' => new StudentEventRegistrationResource($registration), // استخدام الـ Resource
+        ], 201);
+    }
+}
+```
+
+بهذه الطريقة، تكون قد أنشأت الـ API Resource لتنسيق بيانات تسجيل الفعالية، والـ Form Request للتحقق من صحة أي بيانات إضافية قد يتم إرسالها من تطبيق الموبايل عند التسجيل في فعالية.
+---
+
+
+بالتأكيد، سأقوم بإعادة تصميم ملف `routes/api.php` ليتضمن المسارات الإضافية التي طلبتها للفلترة. سأفترض أنك ستقوم بتعديل المتحكمات المقابلة (مثل `ApiCourseController`, `ApiProjectController`, `ApiUniversityFacilityController`) لتتعامل مع هذه الفلاتر الجديدة.
+
+**ملف `routes/api.php` المعدل:**
+
+```php
+<?php
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+
+// Controllers for API
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\SpecializationController as ApiSpecializationController;
+use App\Http\Controllers\Api\CourseController as ApiCourseController;
+use App\Http\Controllers\Api\InstructorController as ApiInstructorController;
+use App\Http\Controllers\Api\ProjectController as ApiProjectController;
+use App\Http\Controllers\Api\UniversityFacilityController as ApiUniversityFacilityController;
+use App\Http\Controllers\Api\EventController as ApiEventController;
+use App\Http\Controllers\Api\SearchController as ApiSearchController;
+use App\Http\Controllers\Api\NotificationController as ApiNotificationController;
+use App\Http\Controllers\Api\StudentProfileController as ApiStudentProfileController;
+
+/*
+|--------------------------------------------------------------------------
+| API Routes
+|--------------------------------------------------------------------------
+*/
+
+// Public API Routes (No Authentication Needed)
+Route::post('/login', [AuthController::class, 'login'])->name('api.login');
+
+// Specializations
+Route::get('/specializations', [ApiSpecializationController::class, 'index'])->name('api.specializations.index');
+Route::get('/specializations/{specialization}', [ApiSpecializationController::class, 'show'])->name('api.specializations.show');
+Route::get('/specializations/{specialization}/courses', [ApiCourseController::class, 'getCoursesBySpecialization'])->name('api.specializations.courses');
+
+// Courses
+Route::get('/courses', [ApiCourseController::class, 'index'])->name('api.courses.index'); // يدعم فلترة ?specialization_id=X
+Route::get('/courses/year-level/{yearLevel}', [ApiCourseController::class, 'getCoursesByYearLevel'])->name('api.courses.byYearLevel'); // <<-- جديد: جلب المقررات حسب العام الدراسي
+Route::get('/courses/{course}', [ApiCourseController::class, 'show'])->name('api.courses.show');
+
+// Instructors
+Route::get('/instructors', [ApiInstructorController::class, 'index'])->name('api.instructors.index');
+Route::get('/instructors/{instructor}', [ApiInstructorController::class, 'show'])->name('api.instructors.show');
+
+// Projects
+Route::get('/projects', [ApiProjectController::class, 'index'])->name('api.projects.index'); // يدعم فلترة ?specialization_id=X&year=YYYY&semester=الخريف
+Route::get('/projects/filter', [ApiProjectController::class, 'filterProjects'])->name('api.projects.filter'); // <<-- جديد: مسار مخصص لفلترة متقدمة للمشاريع (بديل أو مكمل)
+Route::get('/projects/{project}', [ApiProjectController::class, 'show'])->name('api.projects.show');
+
+// University Facilities
+Route::get('/university-facilities', [ApiUniversityFacilityController::class, 'index'])->name('api.university-facilities.index'); // يدعم فلترة ?category=X&media_type=Y
+Route::get('/university-facilities/category/{categorySlug}', [ApiUniversityFacilityController::class, 'getFacilitiesByCategory'])->name('api.university-facilities.byCategory'); // <<-- جديد: جلب المرافق حسب التصنيف
+Route::get('/university-facilities/{universityMedia}', [ApiUniversityFacilityController::class, 'show'])->name('api.university-facilities.show');
+
+// Events
+Route::get('/events', [ApiEventController::class, 'index'])->name('api.events.index');
+Route::get('/events/{event}', [ApiEventController::class, 'show'])->name('api.events.show');
+
+// Search
+Route::get('/search', [ApiSearchController::class, 'search'])->name('api.search');
+
+
+// Authenticated API Routes (Require Student Authentication - Sanctum)
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/logout', [AuthController::class, 'logout'])->name('api.logout');
+    Route::get('/user', [AuthController::class, 'user'])->name('api.user');
+
+    // Event Registration
+    Route::post('/events/{event}/register', [ApiEventController::class, 'register'])->name('api.events.register');
+
+    // Notifications
+    Route::get('/notifications', [ApiNotificationController::class, 'index'])->name('api.notifications.index');
+    Route::post('/notifications/{notification}/mark-as-read', [ApiNotificationController::class, 'markAsRead'])->name('api.notifications.markAsRead');
+    Route::post('/notifications/mark-all-as-read', [ApiNotificationController::class, 'markAllAsRead'])->name('api.notifications.markAllAsRead');
+
+    // Student Profile Management
+    Route::get('/profile', [ApiStudentProfileController::class, 'show'])->name('api.profile.show');
+    Route::put('/profile', [ApiStudentProfileController::class, 'update'])->name('api.profile.update');
+    Route::post('/profile/change-password', [ApiStudentProfileController::class, 'changePassword'])->name('api.profile.changePassword');
+
+    // يمكنك إضافة مسارات أخرى تتطلب مصادقة الطالب هنا
+    // مثال: عرض المقررات المسجل بها الطالب حاليًا
+    // Route::get('/my-courses', [ApiStudentProfileController::class, 'myCourses'])->name('api.myCourses');
+});
+```
+
+**شرح التعديلات والمسارات الجديدة:**
+
+1.  **`Route::get('/courses/year-level/{yearLevel}', [ApiCourseController::class, 'getCoursesByYearLevel'])->name('api.courses.byYearLevel');`**
+    *   **الغرض:** مسار جديد لجلب المقررات بناءً على مستوى السنة الدراسية (مثل 1 للسنة الأولى، 2 للسنة الثانية، إلخ).
+    *   **المتحكم:** ستحتاج إلى إضافة دالة `getCoursesByYearLevel(Request $request, int $yearLevel)` إلى `ApiCourseController.php`. هذه الدالة ستقوم بفلترة المقررات بناءً على `$yearLevel` المرسل في المسار.
+    *   **مثال للاستخدام:** `/api/courses/year-level/1`
+
+2.  **`Route::get('/projects/filter', [ApiProjectController::class, 'filterProjects'])->name('api.projects.filter');`**
+    *   **الغرض:** مسار مخصص لفلترة متقدمة لمشاريع التخرج. يمكنك تمرير بارامترات الفلترة كـ query parameters (مثل `/api/projects/filter?specialization_id=1&year=2023&semester=الربيع`). هذا يعطيك مرونة أكبر من استخدام مسار `index` فقط إذا كانت لديك العديد من معايير الفلترة.
+    *   **المتحكم:** ستحتاج إلى إضافة دالة `filterProjects(Request $request)` إلى `ApiProjectController.php`. هذه الدالة ستقوم بمعالجة جميع بارامترات الفلترة من `$request`.
+    *   **ملاحظة:** يمكنك أيضًا تحقيق نفس الغرض عن طريق توسيع دالة `index` في `ApiProjectController` لتقبل المزيد من الـ query parameters، ولكن مسار مخصص قد يكون أوضح إذا كان منطق الفلترة معقدًا.
+
+3.  **`Route::get('/university-facilities/category/{categorySlug}', [ApiUniversityFacilityController::class, 'getFacilitiesByCategory'])->name('api.university-facilities.byCategory');`**
+    *   **الغرض:** مسار جديد لجلب وسائط الجامعة بناءً على تصنيف معين (مثل `labs`, `halls`, `libraries`). الـ `{categorySlug}` سيكون اسم التصنيف (أو معرف فريد له).
+    *   **المتحكم:** ستحتاج إلى إضافة دالة `getFacilitiesByCategory(Request $request, string $categorySlug)` إلى `ApiUniversityFacilityController.php`.
+    *   **مثال للاستخدام:** `/api/university-facilities/category/labs`
+
+**خطوات تالية لتطبيق هذه المسارات:**
+
+1.  **تعديل المتحكمات:**
+    *   **`ApiCourseController.php`:** أضف دالة `getCoursesByYearLevel(Request $request, int $yearLevel)`.
+        ```php
+        // في ApiCourseController.php
+        public function getCoursesByYearLevel(Request $request, int $yearLevel)
+        {
+            $query = Course::where('year_level', $yearLevel);
+
+            // يمكنك إضافة فلاتر إضافية هنا إذا أردت، مثل الاختصاص
+            if ($request->has('specialization_id')) {
+                $query->where('specialization_id', $request->specialization_id);
+            }
+            // يمكنك أيضًا إضافة شروط للتحقق من أن المقرر متاح للعرض
+            // $query->where('is_enrollable', true); // أو أي شروط أخرى
+
+            $courses = $query->with('specialization')->get();
+            return new CourseCollection($courses);
+        }
+        ```
+    *   **`ApiProjectController.php`:** أضف دالة `filterProjects(Request $request)` (أو قم بتوسيع دالة `index` الحالية).
+        ```php
+        // في ApiProjectController.php
+        public function filterProjects(Request $request) // أو عدّل دالة index لتقبل كل هذه البارامترات
+        {
+            $query = Project::query()->with(['specialization', 'supervisor']);
+
+            if ($request->filled('specialization_id')) {
+                $query->where('specialization_id', $request->specialization_id);
+            }
+            if ($request->filled('year')) {
+                $query->where('year', $request->year);
+            }
+            if ($request->filled('semester')) {
+                $query->where('semester', $request->semester);
+            }
+            if ($request->filled('keywords')) {
+                $keywords = $request->keywords;
+                $query->where(function ($q) use ($keywords) {
+                    $q->where('title_ar', 'like', "%{$keywords}%")
+                      ->orWhere('title_en', 'like', "%{$keywords}%")
+                      ->orWhere('student_names', 'like', "%{$keywords}%") // إذا كان student_names نصيًا
+                      ->orWhere('keywords', 'like', "%{$keywords}%");
+                });
+            }
+            // أضف المزيد من الفلاتر حسب الحاجة
+
+            $projects = $query->orderBy('year', 'desc')->orderBy('semester', 'asc')->paginate(15); // استخدام paginate
+            return new ProjectCollection($projects);
+        }
+        ```
+        إذا كنت ستستخدم دالة `index` الحالية، فقط تأكد من أنها
+
+        ---
+---
+بالتأكيد، سأقوم بإعادة تصميم ملف `routes/api.php` ليتضمن المسارات الإضافية التي طلبتها للفلترة. سأفترض أنك ستقوم بتعديل المتحكمات المقابلة (مثل `ApiCourseController`, `ApiProjectController`, `ApiUniversityFacilityController`) لتتعامل مع هذه الفلاتر الجديدة.
+
+**ملف `routes/api.php` المعدل:**
+
+```php
+<?php
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+
+// Controllers for API
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\SpecializationController as ApiSpecializationController;
+use App\Http\Controllers\Api\CourseController as ApiCourseController;
+use App\Http\Controllers\Api\InstructorController as ApiInstructorController;
+use App\Http\Controllers\Api\ProjectController as ApiProjectController;
+use App\Http\Controllers\Api\UniversityFacilityController as ApiUniversityFacilityController;
+use App\Http\Controllers\Api\EventController as ApiEventController;
+use App\Http\Controllers\Api\SearchController as ApiSearchController;
+use App\Http\Controllers\Api\NotificationController as ApiNotificationController;
+use App\Http\Controllers\Api\StudentProfileController as ApiStudentProfileController;
+
+/*
+|--------------------------------------------------------------------------
+| API Routes
+|--------------------------------------------------------------------------
+*/
+
+// Public API Routes (No Authentication Needed)
+Route::post('/login', [AuthController::class, 'login'])->name('api.login');
+
+// Specializations
+Route::get('/specializations', [ApiSpecializationController::class, 'index'])->name('api.specializations.index');
+Route::get('/specializations/{specialization}', [ApiSpecializationController::class, 'show'])->name('api.specializations.show');
+Route::get('/specializations/{specialization}/courses', [ApiCourseController::class, 'getCoursesBySpecialization'])->name('api.specializations.courses');
+
+// Courses
+Route::get('/courses', [ApiCourseController::class, 'index'])->name('api.courses.index'); // يدعم فلترة ?specialization_id=X
+Route::get('/courses/year-level/{yearLevel}', [ApiCourseController::class, 'getCoursesByYearLevel'])->name('api.courses.byYearLevel'); // <<-- جديد: جلب المقررات حسب العام الدراسي
+Route::get('/courses/{course}', [ApiCourseController::class, 'show'])->name('api.courses.show');
+
+// Instructors
+Route::get('/instructors', [ApiInstructorController::class, 'index'])->name('api.instructors.index');
+Route::get('/instructors/{instructor}', [ApiInstructorController::class, 'show'])->name('api.instructors.show');
+
+// Projects
+Route::get('/projects', [ApiProjectController::class, 'index'])->name('api.projects.index'); // يدعم فلترة ?specialization_id=X&year=YYYY&semester=الخريف
+Route::get('/projects/filter', [ApiProjectController::class, 'filterProjects'])->name('api.projects.filter'); // <<-- جديد: مسار مخصص لفلترة متقدمة للمشاريع (بديل أو مكمل)
+Route::get('/projects/{project}', [ApiProjectController::class, 'show'])->name('api.projects.show');
+
+// University Facilities
+Route::get('/university-facilities', [ApiUniversityFacilityController::class, 'index'])->name('api.university-facilities.index'); // يدعم فلترة ?category=X&media_type=Y
+Route::get('/university-facilities/category/{categorySlug}', [ApiUniversityFacilityController::class, 'getFacilitiesByCategory'])->name('api.university-facilities.byCategory'); // <<-- جديد: جلب المرافق حسب التصنيف
+Route::get('/university-facilities/{universityMedia}', [ApiUniversityFacilityController::class, 'show'])->name('api.university-facilities.show');
+
+// Events
+Route::get('/events', [ApiEventController::class, 'index'])->name('api.events.index');
+Route::get('/events/{event}', [ApiEventController::class, 'show'])->name('api.events.show');
+
+// Search
+Route::get('/search', [ApiSearchController::class, 'search'])->name('api.search');
+
+
+// Authenticated API Routes (Require Student Authentication - Sanctum)
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/logout', [AuthController::class, 'logout'])->name('api.logout');
+    Route::get('/user', [AuthController::class, 'user'])->name('api.user');
+
+    // Event Registration
+    Route::post('/events/{event}/register', [ApiEventController::class, 'register'])->name('api.events.register');
+
+    // Notifications
+    Route::get('/notifications', [ApiNotificationController::class, 'index'])->name('api.notifications.index');
+    Route::post('/notifications/{notification}/mark-as-read', [ApiNotificationController::class, 'markAsRead'])->name('api.notifications.markAsRead');
+    Route::post('/notifications/mark-all-as-read', [ApiNotificationController::class, 'markAllAsRead'])->name('api.notifications.markAllAsRead');
+
+    // Student Profile Management
+    Route::get('/profile', [ApiStudentProfileController::class, 'show'])->name('api.profile.show');
+    Route::put('/profile', [ApiStudentProfileController::class, 'update'])->name('api.profile.update');
+    Route::post('/profile/change-password', [ApiStudentProfileController::class, 'changePassword'])->name('api.profile.changePassword');
+
+    // يمكنك إضافة مسارات أخرى تتطلب مصادقة الطالب هنا
+    // مثال: عرض المقررات المسجل بها الطالب حاليًا
+    // Route::get('/my-courses', [ApiStudentProfileController::class, 'myCourses'])->name('api.myCourses');
+});
+```
+
+**شرح التعديلات والمسارات الجديدة:**
+
+1.  **`Route::get('/courses/year-level/{yearLevel}', [ApiCourseController::class, 'getCoursesByYearLevel'])->name('api.courses.byYearLevel');`**
+    *   **الغرض:** مسار جديد لجلب المقررات بناءً على مستوى السنة الدراسية (مثل 1 للسنة الأولى، 2 للسنة الثانية، إلخ).
+    *   **المتحكم:** ستحتاج إلى إضافة دالة `getCoursesByYearLevel(Request $request, int $yearLevel)` إلى `ApiCourseController.php`. هذه الدالة ستقوم بفلترة المقررات بناءً على `$yearLevel` المرسل في المسار.
+    *   **مثال للاستخدام:** `/api/courses/year-level/1`
+
+2.  **`Route::get('/projects/filter', [ApiProjectController::class, 'filterProjects'])->name('api.projects.filter');`**
+    *   **الغرض:** مسار مخصص لفلترة متقدمة لمشاريع التخرج. يمكنك تمرير بارامترات الفلترة كـ query parameters (مثل `/api/projects/filter?specialization_id=1&year=2023&semester=الربيع`). هذا يعطيك مرونة أكبر من استخدام مسار `index` فقط إذا كانت لديك العديد من معايير الفلترة.
+    *   **المتحكم:** ستحتاج إلى إضافة دالة `filterProjects(Request $request)` إلى `ApiProjectController.php`. هذه الدالة ستقوم بمعالجة جميع بارامترات الفلترة من `$request`.
+    *   **ملاحظة:** يمكنك أيضًا تحقيق نفس الغرض عن طريق توسيع دالة `index` في `ApiProjectController` لتقبل المزيد من الـ query parameters، ولكن مسار مخصص قد يكون أوضح إذا كان منطق الفلترة معقدًا.
+
+3.  **`Route::get('/university-facilities/category/{categorySlug}', [ApiUniversityFacilityController::class, 'getFacilitiesByCategory'])->name('api.university-facilities.byCategory');`**
+    *   **الغرض:** مسار جديد لجلب وسائط الجامعة بناءً على تصنيف معين (مثل `labs`, `halls`, `libraries`). الـ `{categorySlug}` سيكون اسم التصنيف (أو معرف فريد له).
+    *   **المتحكم:** ستحتاج إلى إضافة دالة `getFacilitiesByCategory(Request $request, string $categorySlug)` إلى `ApiUniversityFacilityController.php`.
+    *   **مثال للاستخدام:** `/api/university-facilities/category/labs`
+
+**خطوات تالية لتطبيق هذه المسارات:**
+
+1.  **تعديل المتحكمات:**
+    *   **`ApiCourseController.php`:** أضف دالة `getCoursesByYearLevel(Request $request, int $yearLevel)`.
+        ```php
+        // في ApiCourseController.php
+        public function getCoursesByYearLevel(Request $request, int $yearLevel)
+        {
+            $query = Course::where('year_level', $yearLevel);
+
+            // يمكنك إضافة فلاتر إضافية هنا إذا أردت، مثل الاختصاص
+            if ($request->has('specialization_id')) {
+                $query->where('specialization_id', $request->specialization_id);
+            }
+            // يمكنك أيضًا إضافة شروط للتحقق من أن المقرر متاح للعرض
+            // $query->where('is_enrollable', true); // أو أي شروط أخرى
+
+            $courses = $query->with('specialization')->get();
+            return new CourseCollection($courses);
+        }
+        ```
+    *   **`ApiProjectController.php`:** أضف دالة `filterProjects(Request $request)` (أو قم بتوسيع دالة `index` الحالية).
+        ```php
+        // في ApiProjectController.php
+        public function filterProjects(Request $request) // أو عدّل دالة index لتقبل كل هذه البارامترات
+        {
+            $query = Project::query()->with(['specialization', 'supervisor']);
+
+            if ($request->filled('specialization_id')) {
+                $query->where('specialization_id', $request->specialization_id);
+            }
+            if ($request->filled('year')) {
+                $query->where('year', $request->year);
+            }
+            if ($request->filled('semester')) {
+                $query->where('semester', $request->semester);
+            }
+            if ($request->filled('keywords')) {
+                $keywords = $request->keywords;
+                $query->where(function ($q) use ($keywords) {
+                    $q->where('title_ar', 'like', "%{$keywords}%")
+                      ->orWhere('title_en', 'like', "%{$keywords}%")
+                      ->orWhere('student_names', 'like', "%{$keywords}%") // إذا كان student_names نصيًا
+                      ->orWhere('keywords', 'like', "%{$keywords}%");
+                });
+            }
+            // أضف المزيد من الفلاتر حسب الحاجة
+
+            $projects = $query->orderBy('year', 'desc')->orderBy('semester', 'asc')->paginate(15); // استخدام paginate
+            return new ProjectCollection($projects);
+        }
+        ```
+        إذا كنت ستستخدم دالة `index` الحالية، فقط تأكد من أنها تتعامل مع جميع الـ query parameters التي قد ترسلها.
+    *   **`ApiUniversityFacilityController.php`:** أضف دالة `getFacilitiesByCategory(Request $request, string $categorySlug)`.
+        ```php
+        // في ApiUniversityFacilityController.php
+        public function getFacilitiesByCategory(Request $request, string $categorySlug)
+        {
+            $query = UniversityMedia::where('category', $categorySlug);
+
+            if ($request->has('media_type')) {
+                $query->where('media_type', $request->media_type);
+            }
+            // أضف المزيد من الفلاتر إذا لزم الأمر
+
+            $mediaItems = $query->orderBy('created_at', 'desc')->paginate(15); // استخدام paginate
+            return new UniversityMediaCollection($mediaItems);
+        }
+        ```
+
+2.  **تسمية المسارات (`->name(...)`):**
+    لقد أضفت أسماء للمسارات. هذا مفيد إذا كنت ستقوم بإنشاء روابط لهذه المسارات من داخل تطبيق Laravel نفسه (على الرغم من أنها API، قد يكون مفيدًا في بعض الحالات مثل إنشاء وثائق API تلقائيًا أو للاستخدام الداخلي).
+
+3.  **الاختبار:**
+    قم باختبار هذه المسارات الجديدة باستخدام أداة مثل Postman أو Insomnia للتأكد من أنها تعمل كما هو متوقع وترجع البيانات المفلترة بشكل صحيح.
+
+بهذه التعديلات، يكون ملف `routes/api.php` الخاص بك أكثر شمولاً ويدعم متطلبات الفلترة التي حددتها.
+
+---
 
 
