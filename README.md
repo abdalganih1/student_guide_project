@@ -12017,4 +12017,633 @@ protected function prepareForValidation()
 ---
 
 
+بالتأكيد، سنقوم الآن بتصميم ملفي `StoreStudentRequest` و `UpdateStudentRequest` ثم ملفات الـ Blade Views الخاصة بإدارة الطلاب (`Students`).
+
+**أولاً: تصميم ملفات Form Requests للطلاب**
+
+1.  **إنشاء الملفات (إذا لم تكن قد أنشأتها بالفعل):**
+    ```bash
+    php artisan make:request Admin/StoreStudentRequest
+    php artisan make:request Admin/UpdateStudentRequest
+    ```
+
+2.  **محتوى `app/Http/Requests/Admin/StoreStudentRequest.php`:**
+
+    ```php
+    <?php
+
+    namespace App\Http\Requests\Admin;
+
+    use Illuminate\Foundation\Http\FormRequest;
+    use Illuminate\Support\Facades\Auth;
+    use Illuminate\Validation\Rules\Password;
+
+    class StoreStudentRequest extends FormRequest
+    {
+        /**
+         * Determine if the user is authorized to make this request.
+         */
+        public function authorize(): bool
+        {
+            return Auth::guard('admin_web')->check(); // أو تحقق من صلاحية معينة
+        }
+
+        /**
+         * Get the validation rules that apply to the request.
+         *
+         * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+         */
+        public function rules(): array
+        {
+            return [
+                'student_university_id' => 'required|string|max:100|unique:students,student_university_id',
+                'full_name_ar' => 'required|string|max:255',
+                'full_name_en' => 'nullable|string|max:255',
+                'email' => 'required|string|email|max:255|unique:students,email',
+                'password' => ['nullable', 'string', Password::min(6), 'confirmed'], // كلمة المرور اختيارية عند الإنشاء من قبل المدير
+                'specialization_id' => 'nullable|exists:specializations,id',
+                'enrollment_year' => 'nullable|integer|digits:4|min:1980|max:' . (date('Y') + 1),
+                'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048', // اسم حقل الملف
+                'is_active' => 'required|boolean',
+                // admin_action_by_id و admin_action_at سيتم تعيينهما في المتحكم
+            ];
+        }
+
+        /**
+         * Get custom messages for validator errors.
+         */
+        public function messages(): array
+        {
+            return [
+                'student_university_id.required' => 'الرقم الجامعي للطالب مطلوب.',
+                'student_university_id.unique' => 'هذا الرقم الجامعي مستخدم مسبقاً.',
+                'full_name_ar.required' => 'اسم الطالب باللغة العربية مطلوب.',
+                'email.required' => 'البريد الإلكتروني للطالب مطلوب.',
+                'email.email' => 'صيغة البريد الإلكتروني غير صحيحة.',
+                'email.unique' => 'هذا البريد الإلكتروني مستخدم مسبقاً.',
+                'password.min' => 'كلمة المرور يجب أن تتكون من 6 أحرف على الأقل.',
+                'password.confirmed' => 'تأكيد كلمة المرور غير مطابق.',
+                'specialization_id.exists' => 'الاختصاص المحدد غير موجود.',
+                'enrollment_year.integer' => 'سنة الالتحاق يجب أن تكون رقمًا صحيحًا.',
+                'enrollment_year.digits' => 'سنة الالتحاق يجب أن تتكون من 4 أرقام.',
+                'profile_picture.image' => 'الملف المرفوع يجب أن يكون صورة.',
+                'is_active.required' => 'حالة نشاط الطالب مطلوبة.',
+            ];
+        }
+    }
+    ```
+
+3.  **محتوى `app/Http/Requests/Admin/UpdateStudentRequest.php`:**
+
+    ```php
+    <?php
+
+    namespace App\Http\Requests\Admin;
+
+    use Illuminate\Foundation\Http\FormRequest;
+    use Illuminate\Support\Facades\Auth;
+    use Illuminate\Validation\Rule;
+    use Illuminate\Validation\Rules\Password;
+
+    class UpdateStudentRequest extends FormRequest
+    {
+        /**
+         * Determine if the user is authorized to make this request.
+         */
+        public function authorize(): bool
+        {
+            return Auth::guard('admin_web')->check();
+        }
+
+        /**
+         * Get the validation rules that apply to the request.
+         *
+         * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+         */
+        public function rules(): array
+        {
+            $studentId = $this->route('student')->id; // الحصول على id الطالب من المسار
+
+            return [
+                'student_university_id' => [
+                    'required',
+                    'string',
+                    'max:100',
+                    Rule::unique('students', 'student_university_id')->ignore($studentId),
+                ],
+                'full_name_ar' => 'required|string|max:255',
+                'full_name_en' => 'nullable|string|max:255',
+                'email' => [
+                    'required',
+                    'string',
+                    'email',
+                    'max:255',
+                    Rule::unique('students', 'email')->ignore($studentId),
+                ],
+                'password' => ['nullable', 'string', Password::min(6), 'confirmed'], // كلمة المرور اختيارية عند التحديث
+                'specialization_id' => 'nullable|exists:specializations,id',
+                'enrollment_year' => 'nullable|integer|digits:4|min:1980|max:' . (date('Y') + 1),
+                'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+                'remove_profile_picture' => 'nullable|boolean',
+                'is_active' => 'required|boolean',
+            ];
+        }
+
+        public function messages(): array
+        {
+            return [
+                'student_university_id.required' => 'الرقم الجامعي للطالب مطلوب.',
+                'student_university_id.unique' => 'هذا الرقم الجامعي مستخدم مسبقاً.',
+                'full_name_ar.required' => 'اسم الطالب باللغة العربية مطلوب.',
+                'email.required' => 'البريد الإلكتروني للطالب مطلوب.',
+                'email.email' => 'صيغة البريد الإلكتروني غير صحيحة.',
+                'email.unique' => 'هذا البريد الإلكتروني مستخدم مسبقاً.',
+                'password.min' => 'كلمة المرور يجب أن تتكون من 6 أحرف على الأقل.',
+                'password.confirmed' => 'تأكيد كلمة المرور غير مطابق.',
+                'specialization_id.exists' => 'الاختصاص المحدد غير موجود.',
+                'enrollment_year.integer' => 'سنة الالتحاق يجب أن تكون رقمًا صحيحًا.',
+                'enrollment_year.digits' => 'سنة الالتحاق يجب أن تتكون من 4 أرقام.',
+                'profile_picture.image' => 'الملف المرفوع يجب أن يكون صورة.',
+                'is_active.required' => 'حالة نشاط الطالب مطلوبة.',
+            ];
+        }
+    }
+    ```
+
+---
+
+**ثانياً: تصميم ملفات الـ Blade Views لإدارة الطلاب**
+
+تأكد من أن لديك المجلد `resources/views/admin/students/`.
+
+1.  **`resources/views/admin/students/index.blade.php`**
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'إدارة الطلاب')
+
+    @section('content')
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1><i class="fas fa-user-graduate me-2"></i>إدارة الطلاب</h1>
+            <a href="{{ route('admin.students.create') }}" class="btn btn-success">
+                <i class="fas fa-user-plus me-1"></i> إضافة طالب جديد
+            </a>
+        </div>
+
+        {{-- قسم الفلترة --}}
+        <div class="card mb-3">
+            <div class="card-body">
+                <form method="GET" action="{{ route('admin.students.index') }}">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-3">
+                            <label for="search_filter" class="form-label">بحث (اسم، رقم جامعي، بريد)</label>
+                            <input type="text" class="form-control form-control-sm" id="search_filter" name="search" value="{{ request('search') }}">
+                        </div>
+                        <div class="col-md-2">
+                            <label for="specialization_id_filter" class="form-label">الاختصاص</label>
+                            <select class="form-select form-select-sm" id="specialization_id_filter" name="specialization_id">
+                                <option value="">-- الكل --</option>
+                                @foreach($specializations as $specialization)
+                                    <option value="{{ $specialization->id }}" {{ request('specialization_id') == $specialization->id ? 'selected' : '' }}>
+                                        {{ $specialization->name_ar }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="enrollment_year_filter" class="form-label">سنة الالتحاق</label>
+                            <select class="form-select form-select-sm" id="enrollment_year_filter" name="enrollment_year">
+                                <option value="">-- الكل --</option>
+                                @foreach($enrollmentYears as $year)
+                                    <option value="{{ $year }}" {{ request('enrollment_year') == $year ? 'selected' : '' }}>
+                                        {{ $year }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="is_active_filter" class="form-label">الحالة</label>
+                            <select class="form-select form-select-sm" id="is_active_filter" name="is_active">
+                                <option value="">-- الكل --</option>
+                                <option value="1" {{ request('is_active') == '1' ? 'selected' : '' }}>نشط</option>
+                                <option value="0" {{ request('is_active') == '0' && request()->filled('is_active') ? 'selected' : '' }}>غير نشط</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-primary btn-sm w-100">فلترة</button>
+                        </div>
+                        <div class="col-md-1">
+                            <a href="{{ route('admin.students.index') }}" class="btn btn-secondary btn-sm w-100">إلغاء</a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                @if($students->isEmpty())
+                    <div class="alert alert-info text-center">لا يوجد طلاب لعرضهم حالياً.</div>
+                @else
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>الصورة</th>
+                                    <th>الرقم الجامعي</th>
+                                    <th>الاسم (عربي)</th>
+                                    <th>البريد الإلكتروني</th>
+                                    <th>الاختصاص</th>
+                                    <th>سنة الالتحاق</th>
+                                    <th>الحالة</th>
+                                    <th>الإجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($students as $student)
+                                <tr>
+                                    <td>{{ $student->id }}</td>
+                                    <td>
+                                        @if($student->profile_picture_url)
+                                            <img src="{{ Storage::url($student->profile_picture_url) }}" alt="{{ $student->full_name_ar }}" class="img-thumbnail" style="width: 50px; height: 50px; object-fit: cover;">
+                                        @else
+                                            <i class="fas fa-user fa-2x text-secondary"></i>
+                                        @endif
+                                    </td>
+                                    <td>{{ $student->student_university_id }}</td>
+                                    <td>
+                                        <a href="{{ route('admin.students.show', $student) }}">{{ $student->full_name_ar }}</a>
+                                        @if($student->full_name_en) <small class="d-block text-muted">{{ $student->full_name_en }}</small>@endif
+                                    </td>
+                                    <td>{{ $student->email }}</td>
+                                    <td>{{ $student->specialization->name_ar ?? '-' }}</td>
+                                    <td>{{ $student->enrollment_year ?: '-' }}</td>
+                                    <td>
+                                        @if($student->is_active)
+                                            <span class="badge bg-success">نشط</span>
+                                        @else
+                                            <span class="badge bg-danger">غير نشط</span>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        <a href="{{ route('admin.students.show', $student) }}" class="btn btn-sm btn-info" title="عرض"><i class="fas fa-eye"></i></a>
+                                        <a href="{{ route('admin.students.edit', $student) }}" class="btn btn-sm btn-primary" title="تعديل"><i class="fas fa-edit"></i></a>
+                                        <form action="{{ route('admin.students.destroy', $student) }}" method="POST" class="d-inline" onsubmit="return confirm('هل أنت متأكد من رغبتك في حذف هذا الطالب؟');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn btn-sm btn-danger" title="حذف"><i class="fas fa-trash"></i></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-3">
+                        {{ $students->appends(request()->query())->links() }}
+                    </div>
+                @endif
+            </div>
+        </div>
+    </div>
+    @endsection
+    ```
+
+2.  **`resources/views/admin/students/create.blade.php`**
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'إضافة طالب جديد')
+
+    @section('content')
+    <div class="container-fluid">
+        <h1><i class="fas fa-user-plus me-2"></i>إضافة طالب جديد</h1>
+
+        <div class="card mt-3">
+            <div class="card-body">
+                <form action="{{ route('admin.students.store') }}" method="POST" enctype="multipart/form-data">
+                    @csrf
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="student_university_id" class="form-label">الرقم الجامعي <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control @error('student_university_id') is-invalid @enderror" id="student_university_id" name="student_university_id" value="{{ old('student_university_id') }}" required>
+                            @error('student_university_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="enrollment_year" class="form-label">سنة الالتحاق</label>
+                            <input type="number" class="form-control @error('enrollment_year') is-invalid @enderror" id="enrollment_year" name="enrollment_year" value="{{ old('enrollment_year', date('Y')) }}" min="1980" max="{{ date('Y') + 1 }}">
+                            @error('enrollment_year') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="full_name_ar" class="form-label">الاسم الكامل (عربي) <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control @error('full_name_ar') is-invalid @enderror" id="full_name_ar" name="full_name_ar" value="{{ old('full_name_ar') }}" required>
+                            @error('full_name_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="full_name_en" class="form-label">الاسم الكامل (إنجليزي)</label>
+                            <input type="text" class="form-control @error('full_name_en') is-invalid @enderror" id="full_name_en" name="full_name_en" value="{{ old('full_name_en') }}">
+                            @error('full_name_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="email" class="form-label">البريد الإلكتروني <span class="text-danger">*</span></label>
+                        <input type="email" class="form-control @error('email') is-invalid @enderror" id="email" name="email" value="{{ old('email') }}" required>
+                        @error('email') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="password" class="form-label">كلمة المرور (اختياري للمدير)</label>
+                            <input type="password" class="form-control @error('password') is-invalid @enderror" id="password" name="password">
+                            <small class="form-text text-muted">اتركه فارغًا إذا لم ترغب في تعيين كلمة مرور الآن.</small>
+                            @error('password') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="password_confirmation" class="form-label">تأكيد كلمة المرور</label>
+                            <input type="password" class="form-control" id="password_confirmation" name="password_confirmation">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="specialization_id" class="form-label">الاختصاص (اختياري)</label>
+                        <select class="form-select @error('specialization_id') is-invalid @enderror" id="specialization_id" name="specialization_id">
+                            <option value="">-- اختر الاختصاص --</option>
+                            @foreach($specializations as $specialization)
+                                <option value="{{ $specialization->id }}" {{ old('specialization_id') == $specialization->id ? 'selected' : '' }}>
+                                    {{ $specialization->name_ar }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('specialization_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="profile_picture" class="form-label">الصورة الشخصية (اختياري)</label>
+                        <input type="file" class="form-control @error('profile_picture') is-invalid @enderror" id="profile_picture" name="profile_picture">
+                        @error('profile_picture') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="is_active" class="form-label">الحالة <span class="text-danger">*</span></label>
+                        <select class="form-select @error('is_active') is-invalid @enderror" id="is_active" name="is_active" required>
+                            <option value="1" {{ old('is_active', '1') == '1' ? 'selected' : '' }}>نشط</option>
+                            <option value="0" {{ old('is_active') == '0' ? 'selected' : '' }}>غير نشط</option>
+                        </select>
+                        @error('is_active') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> حفظ الطالب</button>
+                        <a href="{{ route('admin.students.index') }}" class="btn btn-secondary">إلغاء</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    @endsection
+    ```
+
+3.  **`resources/views/admin/students/edit.blade.php`**
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'تعديل بيانات الطالب: ' . $student->full_name_ar)
+
+    @section('content')
+    <div class="container-fluid">
+        <h1><i class="fas fa-user-edit me-2"></i>تعديل بيانات الطالب: {{ $student->full_name_ar }}</h1>
+
+        <div class="card mt-3">
+            <div class="card-body">
+                <form action="{{ route('admin.students.update', $student) }}" method="POST" enctype="multipart/form-data">
+                    @csrf
+                    @method('PUT')
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="student_university_id" class="form-label">الرقم الجامعي <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control @error('student_university_id') is-invalid @enderror" id="student_university_id" name="student_university_id" value="{{ old('student_university_id', $student->student_university_id) }}" required>
+                            @error('student_university_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="enrollment_year" class="form-label">سنة الالتحاق</label>
+                            <input type="number" class="form-control @error('enrollment_year') is-invalid @enderror" id="enrollment_year" name="enrollment_year" value="{{ old('enrollment_year', $student->enrollment_year) }}" min="1980" max="{{ date('Y') + 1 }}">
+                            @error('enrollment_year') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="full_name_ar" class="form-label">الاسم الكامل (عربي) <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control @error('full_name_ar') is-invalid @enderror" id="full_name_ar" name="full_name_ar" value="{{ old('full_name_ar', $student->full_name_ar) }}" required>
+                            @error('full_name_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="full_name_en" class="form-label">الاسم الكامل (إنجليزي)</label>
+                            <input type="text" class="form-control @error('full_name_en') is-invalid @enderror" id="full_name_en" name="full_name_en" value="{{ old('full_name_en', $student->full_name_en) }}">
+                            @error('full_name_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="email" class="form-label">البريد الإلكتروني <span class="text-danger">*</span></label>
+                        <input type="email" class="form-control @error('email') is-invalid @enderror" id="email" name="email" value="{{ old('email', $student->email) }}" required>
+                        @error('email') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="password" class="form-label">كلمة المرور الجديدة (اتركه فارغًا لعدم التغيير)</label>
+                            <input type="password" class="form-control @error('password') is-invalid @enderror" id="password" name="password">
+                            @error('password') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="password_confirmation" class="form-label">تأكيد كلمة المرور الجديدة</label>
+                            <input type="password" class="form-control" id="password_confirmation" name="password_confirmation">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="specialization_id" class="form-label">الاختصاص (اختياري)</label>
+                        <select class="form-select @error('specialization_id') is-invalid @enderror" id="specialization_id" name="specialization_id">
+                            <option value="">-- اختر الاختصاص --</option>
+                            @foreach($specializations as $specialization)
+                                <option value="{{ $specialization->id }}" {{ old('specialization_id', $student->specialization_id) == $specialization->id ? 'selected' : '' }}>
+                                    {{ $specialization->name_ar }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('specialization_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="profile_picture" class="form-label">الصورة الشخصية (اختياري)</label>
+                        <input type="file" class="form-control @error('profile_picture') is-invalid @enderror" id="profile_picture" name="profile_picture">
+                        @error('profile_picture') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        @if($student->profile_picture_url)
+                            <div class="mt-2">
+                                <img src="{{ Storage::url($student->profile_picture_url) }}" alt="الصورة الحالية" style="width: 100px; height: 100px; object-fit: cover; border:1px solid #ddd; padding:3px;">
+                                <div class="form-check mt-1">
+                                    <input class="form-check-input" type="checkbox" name="remove_profile_picture" id="remove_profile_picture" value="1">
+                                    <label class="form-check-label" for="remove_profile_picture">
+                                        إزالة الصورة الحالية (إذا تم رفع صورة جديدة، سيتم استبدالها تلقائياً)
+                                    </label>
+                                </div>
+                            </div>
+                        @endif
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="is_active" class="form-label">الحالة <span class="text-danger">*</span></label>
+                        <select class="form-select @error('is_active') is-invalid @enderror" id="is_active" name="is_active" required>
+                            <option value="1" {{ old('is_active', $student->is_active) == '1' ? 'selected' : '' }}>نشط</option>
+                            <option value="0" {{ old('is_active', $student->is_active) == '0' ? 'selected' : '' }}>غير نشط</option>
+                        </select>
+                        @error('is_active') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> تحديث بيانات الطالب</button>
+                        <a href="{{ route('admin.students.index') }}" class="btn btn-secondary">إلغاء</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    @endsection
+    ```
+
+4.  **`resources/views/admin/students/show.blade.php`**
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'تفاصيل الطالب: ' . $student->full_name_ar)
+
+    @section('content')
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1><i class="fas fa-user-graduate me-2"></i>تفاصيل الطالب: {{ $student->full_name_ar }}</h1>
+            <div>
+                <a href="{{ route('admin.students.edit', $student) }}" class="btn btn-primary"><i class="fas fa-edit me-1"></i> تعديل</a>
+                <a href="{{ route('admin.students.index') }}" class="btn btn-secondary">العودة إلى القائمة</a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="row g-0">
+                <div class="col-md-3 text-center p-3 border-end">
+                    @if($student->profile_picture_url)
+                        <img src="{{ Storage::url($student->profile_picture_url) }}" alt="{{ $student->full_name_ar }}" class="img-fluid rounded-circle mb-2" style="width: 150px; height: 150px; object-fit: cover;">
+                    @else
+                        <i class="fas fa-user fa-5x text-secondary mb-2"></i>
+                    @endif
+                    <h5 class="card-title">{{ $student->full_name_ar }}</h5>
+                    <p class="card-text"><small class="text-muted">{{ $student->student_university_id }}</small></p>
+                    @if($student->is_active)
+                        <span class="badge bg-success">نشط</span>
+                    @else
+                        <span class="badge bg-danger">غير نشط</span>
+                    @endif
+                </div>
+                <div class="col-md-9">
+                    <div class="card-body">
+                        <h5 class="card-title mb-3">معلومات الطالب</h5>
+                        <dl class="row">
+                            <dt class="col-sm-4">الاسم (عربي):</dt>
+                            <dd class="col-sm-8">{{ $student->full_name_ar }}</dd>
+
+                            <dt class="col-sm-4">الاسم (إنجليزي):</dt>
+                            <dd class="col-sm-8">{{ $student->full_name_en ?: '-' }}</dd>
+
+                            <dt class="col-sm-4">الرقم الجامعي:</dt>
+                            <dd class="col-sm-8">{{ $student->student_university_id }}</dd>
+
+                            <dt class="col-sm-4">البريد الإلكتروني:</dt>
+                            <dd class="col-sm-8">{{ $student->email }}</dd>
+
+                            <dt class="col-sm-4">الاختصاص:</dt>
+                            <dd class="col-sm-8">{{ $student->specialization->name_ar ?? 'غير محدد' }}</dd>
+
+                            <dt class="col-sm-4">سنة الالتحاق:</dt>
+                            <dd class="col-sm-8">{{ $student->enrollment_year ?: '-' }}</dd>
+
+                            <dt class="col-sm-4">آخر إجراء إداري بواسطة:</dt>
+                            <dd class="col-sm-8">{{ $student->adminActionBy->name_ar ?? '-' }} @if($student->admin_action_at) (في: {{ $student->admin_action_at->translatedFormat('Y-m-d') }}) @endif</dd>
+
+                            @if($student->admin_action_notes)
+                            <dt class="col-sm-4">ملاحظات إدارية:</dt>
+                            <dd class="col-sm-8">{{ $student->admin_action_notes }}</dd>
+                            @endif
+
+                            <dt class="col-sm-4">تاريخ الإضافة:</dt>
+                            <dd class="col-sm-8">{{ $student->created_at->translatedFormat('Y-m-d H:i') }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h4><i class="fas fa-book-open me-2"></i>المقررات المسجل بها الطالب ({{ $student->courseEnrollments->count() }})</h4>
+            </div>
+            <div class="card-body">
+                @if($student->courseEnrollments->isEmpty())
+                    <p class="text-muted">لم يسجل الطالب في أي مقررات حالياً.</p>
+                @else
+                    <ul class="list-group list-group-flush">
+                        @foreach($student->courseEnrollments as $enrollment)
+                            <li class="list-group-item">
+                                <a href="{{ route('admin.courses.show', $enrollment->course) }}">{{ $enrollment->course->name_ar ?? 'مقرر غير معروف' }}</a>
+                                ({{ $enrollment->course->code ?? '-' }}) - الفصل: {{ $enrollment->semester_enrolled }}
+                                <br>
+                                <small>الحالة: {{ $enrollment->status }} @if($enrollment->grade) | الدرجة: {{ $enrollment->grade }} @endif</small>
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h4><i class="fas fa-calendar-check me-2"></i>الفعاليات المسجل بها الطالب ({{ $student->eventRegistrations->count() }})</h4>
+            </div>
+            <div class="card-body">
+                @if($student->eventRegistrations->isEmpty())
+                    <p class="text-muted">لم يسجل الطالب في أي فعاليات حالياً.</p>
+                @else
+                     <ul class="list-group list-group-flush">
+                        @foreach($student->eventRegistrations as $registration)
+                            <li class="list-group-item">
+                                <a href="{{ route('admin.events.show', $registration->event) }}">{{ $registration->event->title_ar ?? 'فعالية غير معروفة' }}</a>
+                                 - <small>حالة التسجيل: {{ $registration->status }}</small>
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+            </div>
+        </div>
+
+    </div>
+    @endsection
+    ```
+
+بهذا تكون قد حصلت على ملفات الـ Blade Views والـ Form Requests الأساسية لإدارة الطلاب.
+
+
+---
+
+
 
