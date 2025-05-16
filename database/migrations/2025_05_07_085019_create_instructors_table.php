@@ -13,7 +13,8 @@ return new class extends Migration
     {
         Schema::create('instructors', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('faculty_id')->nullable()->constrained('faculties')->nullOnDelete();
+            // $table->foreignId('faculty_id')->nullable()->constrained('faculties')->nullOnDelete();
+            // $table->unsignedBigInteger('faculty_id')->nullable(); // يطابق نوع id() في Laravel (BigInteger)
             $table->string('name_ar');
             $table->string('name_en')->nullable();
             $table->string('title', 100)->nullable();

@@ -6764,6 +6764,177 @@ class AdminUserResource extends JsonResource
 </div>
 @endsection
 ```
+---
+بالتأكيد، إليك محتوى ملف `resources/views/admin/faculties/edit.blade.php` بناءً على محتوى ملف `create.blade.php` الذي قدمته، مع التعديلات اللازمة لعملية "التعديل" بدلاً من "الإنشاء":
+
+```blade
+@extends('admin.layouts.app')
+
+@section('title', 'تعديل بيانات الكلية')
+
+@section('content')
+<div class="container-fluid">
+    <h1>تعديل بيانات الكلية: {{ $faculty->name_ar }}</h1>
+
+    <div class="card">
+        <div class="card-body">
+            <form action="{{ route('admin.faculties.update', $faculty->id) }}" method="POST">
+                @csrf
+                @method('PUT') {{--  أو @method('PATCH') حسب تفضيلك في التوجيه  --}}
+
+                <div class="mb-3">
+                    <label for="name_ar" class="form-label">الاسم (عربي) <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control @error('name_ar') is-invalid @enderror" id="name_ar" name="name_ar" value="{{ old('name_ar', $faculty->name_ar) }}" required>
+                    @error('name_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                </div>
+
+                <div class="mb-3">
+                    <label for="name_en" class="form-label">الاسم (إنجليزي)</label>
+                    <input type="text" class="form-control @error('name_en') is-invalid @enderror" id="name_en" name="name_en" value="{{ old('name_en', $faculty->name_en) }}">
+                    @error('name_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                </div>
+
+                <div class="mb-3">
+                    <label for="description_ar" class="form-label">الوصف (عربي)</label>
+                    <textarea class="form-control @error('description_ar') is-invalid @enderror" id="description_ar" name="description_ar" rows="3">{{ old('description_ar', $faculty->description_ar) }}</textarea>
+                    @error('description_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                </div>
+
+                <div class="mb-3">
+                    <label for="description_en" class="form-label">الوصف (إنجليزي)</label>
+                    <textarea class="form-control @error('description_en') is-invalid @enderror" id="description_en" name="description_en" rows="3">{{ old('description_en', $faculty->description_en) }}</textarea>
+                    @error('description_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                </div>
+
+                <div class="mb-3">
+                    <label for="dean_id" class="form-label">عميد الكلية (اختياري)</label>
+                    <select class="form-select @error('dean_id') is-invalid @enderror" id="dean_id" name="dean_id">
+                        <option value="">-- اختر العميد --</option>
+                        @foreach($instructors as $instructor)
+                            <option value="{{ $instructor->id }}" {{ old('dean_id', $faculty->dean_id) == $instructor->id ? 'selected' : '' }}>
+                                {{ $instructor->name_ar }} ({{ $instructor->name_en }})
+                            </option>
+                        @endforeach
+                    </select>
+                    @error('dean_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                </div>
+
+                <button type="submit" class="btn btn-primary">تحديث الكلية</button>
+                <a href="{{ route('admin.faculties.index') }}" class="btn btn-secondary">إلغاء</a>
+            </form>
+        </div>
+    </div>
+</div>
+@endsection
+```
+
+**التغييرات الرئيسية التي تم إجراؤها لملف `edit.blade.php`:**
+
+1.  **`@section('title', 'تعديل بيانات الكلية')`**: تم تغيير عنوان الصفحة.
+2.  **`<h1>تعديل بيانات الكلية: {{ $faculty->name_ar }}</h1>`**: تم تغيير عنوان الرأس ليعكس عملية التعديل ويتضمن اسم الكلية الحالية (نفترض أن متغير `$faculty` يتم تمريره إلى هذا العرض من الـ Controller).
+3.  **`action="{{ route('admin.faculties.update', $faculty->id) }}"`**: تم تغيير مسار `action` الخاص بالنموذج ليشير إلى التوجيه (Route) المسؤول عن تحديث بيانات الكلية (عادةً ما يكون اسمه `faculties.update` ويأخذ `id` الكلية كمعامل).
+4.  **`@method('PUT')` أو `@method('PATCH')`**: بما أن نماذج HTML لا تدعم بشكل مباشر طلبات `PUT` أو `PATCH`، نستخدم توجيه `@method` الخاص بلارافل لإخبار الخادم بأن هذا الطلب هو فعليًا طلب تحديث. اختر `PUT` أو `PATCH` بناءً على ما حددته في ملف التوجيهات الخاص بك (عادةً `PUT` للتحديث الكامل و `PATCH` للتحديث الجزئي).
+5.  **ملء الحقول بالبيانات الحالية**:
+    *   لكل حقل `input` أو `textarea`، تم تعديل السمة `value` أو المحتوى بين الوسوم لتشمل `old('field_name', $faculty->field_name)`.
+    *   هذا يعني:
+        *   إذا كان هناك خطأ في التحقق من صحة الإدخال وتم إعادة تحميل الصفحة، سيتم ملء الحقل بالقيمة القديمة التي أدخلها المستخدم (`old('field_name')`).
+        *   إذا لم يكن هناك خطأ (أو عند تحميل الصفحة لأول مرة)، سيتم ملء الحقل بالقيمة الحالية من كائن `$faculty` (مثل `$faculty->name_ar`).
+    *   بالنسبة لقائمة `select` الخاصة بالعميد، تم تعديل شرط `selected` ليصبح:
+        `{{ old('dean_id', $faculty->dean_id) == $instructor->id ? 'selected' : '' }}`
+        وهذا يضمن اختيار العميد الحالي للكلية أو العميد الذي تم اختياره قبل حدوث خطأ في التحقق.
+6.  **`button type="submit"`**: تم تغيير نص زر الإرسال إلى "تحديث الكلية".
+
+**افتراضات:**
+
+*   لديك متغير `$faculty` يتم تمريره إلى هذا العرض من دالة `edit` في `FacultyController` الخاص بك، ويحتوي هذا المتغير على بيانات الكلية التي يتم تعديلها.
+*   لديك متغير `$instructors` يتم تمريره إلى هذا العرض ويحتوي على قائمة بالأساتذة لاختيار العميد (كما هو الحال في ملف `create`).
+*   لديك توجيه (Route) باسم `admin.faculties.update` يستقبل طلبات `PUT` أو `PATCH` لمعالجة تحديث بيانات الكلية.
+*   لديك توجيه (Route) باسم `admin.faculties.index` لعرض قائمة الكليات.بالتأكيد، إليك محتوى ملف `resources/views/admin/faculties/edit.blade.php` بناءً على محتوى ملف `create.blade.php` الذي قدمته، مع التعديلات اللازمة لعملية "التعديل" بدلاً من "الإنشاء":
+
+```blade
+@extends('admin.layouts.app')
+
+@section('title', 'تعديل بيانات الكلية')
+
+@section('content')
+<div class="container-fluid">
+    <h1>تعديل بيانات الكلية: {{ $faculty->name_ar }}</h1>
+
+    <div class="card">
+        <div class="card-body">
+            <form action="{{ route('admin.faculties.update', $faculty->id) }}" method="POST">
+                @csrf
+                @method('PUT') {{--  أو @method('PATCH') حسب تفضيلك في التوجيه  --}}
+
+                <div class="mb-3">
+                    <label for="name_ar" class="form-label">الاسم (عربي) <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control @error('name_ar') is-invalid @enderror" id="name_ar" name="name_ar" value="{{ old('name_ar', $faculty->name_ar) }}" required>
+                    @error('name_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                </div>
+
+                <div class="mb-3">
+                    <label for="name_en" class="form-label">الاسم (إنجليزي)</label>
+                    <input type="text" class="form-control @error('name_en') is-invalid @enderror" id="name_en" name="name_en" value="{{ old('name_en', $faculty->name_en) }}">
+                    @error('name_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                </div>
+
+                <div class="mb-3">
+                    <label for="description_ar" class="form-label">الوصف (عربي)</label>
+                    <textarea class="form-control @error('description_ar') is-invalid @enderror" id="description_ar" name="description_ar" rows="3">{{ old('description_ar', $faculty->description_ar) }}</textarea>
+                    @error('description_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                </div>
+
+                <div class="mb-3">
+                    <label for="description_en" class="form-label">الوصف (إنجليزي)</label>
+                    <textarea class="form-control @error('description_en') is-invalid @enderror" id="description_en" name="description_en" rows="3">{{ old('description_en', $faculty->description_en) }}</textarea>
+                    @error('description_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                </div>
+
+                <div class="mb-3">
+                    <label for="dean_id" class="form-label">عميد الكلية (اختياري)</label>
+                    <select class="form-select @error('dean_id') is-invalid @enderror" id="dean_id" name="dean_id">
+                        <option value="">-- اختر العميد --</option>
+                        @foreach($instructors as $instructor)
+                            <option value="{{ $instructor->id }}" {{ old('dean_id', $faculty->dean_id) == $instructor->id ? 'selected' : '' }}>
+                                {{ $instructor->name_ar }} ({{ $instructor->name_en }})
+                            </option>
+                        @endforeach
+                    </select>
+                    @error('dean_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                </div>
+
+                <button type="submit" class="btn btn-primary">تحديث الكلية</button>
+                <a href="{{ route('admin.faculties.index') }}" class="btn btn-secondary">إلغاء</a>
+            </form>
+        </div>
+    </div>
+</div>
+@endsection
+```
+
+**التغييرات الرئيسية التي تم إجراؤها لملف `edit.blade.php`:**
+
+1.  **`@section('title', 'تعديل بيانات الكلية')`**: تم تغيير عنوان الصفحة.
+2.  **`<h1>تعديل بيانات الكلية: {{ $faculty->name_ar }}</h1>`**: تم تغيير عنوان الرأس ليعكس عملية التعديل ويتضمن اسم الكلية الحالية (نفترض أن متغير `$faculty` يتم تمريره إلى هذا العرض من الـ Controller).
+3.  **`action="{{ route('admin.faculties.update', $faculty->id) }}"`**: تم تغيير مسار `action` الخاص بالنموذج ليشير إلى التوجيه (Route) المسؤول عن تحديث بيانات الكلية (عادةً ما يكون اسمه `faculties.update` ويأخذ `id` الكلية كمعامل).
+4.  **`@method('PUT')` أو `@method('PATCH')`**: بما أن نماذج HTML لا تدعم بشكل مباشر طلبات `PUT` أو `PATCH`، نستخدم توجيه `@method` الخاص بلارافل لإخبار الخادم بأن هذا الطلب هو فعليًا طلب تحديث. اختر `PUT` أو `PATCH` بناءً على ما حددته في ملف التوجيهات الخاص بك (عادةً `PUT` للتحديث الكامل و `PATCH` للتحديث الجزئي).
+5.  **ملء الحقول بالبيانات الحالية**:
+    *   لكل حقل `input` أو `textarea`، تم تعديل السمة `value` أو المحتوى بين الوسوم لتشمل `old('field_name', $faculty->field_name)`.
+    *   هذا يعني:
+        *   إذا كان هناك خطأ في التحقق من صحة الإدخال وتم إعادة تحميل الصفحة، سيتم ملء الحقل بالقيمة القديمة التي أدخلها المستخدم (`old('field_name')`).
+        *   إذا لم يكن هناك خطأ (أو عند تحميل الصفحة لأول مرة)، سيتم ملء الحقل بالقيمة الحالية من كائن `$faculty` (مثل `$faculty->name_ar`).
+    *   بالنسبة لقائمة `select` الخاصة بالعميد، تم تعديل شرط `selected` ليصبح:
+        `{{ old('dean_id', $faculty->dean_id) == $instructor->id ? 'selected' : '' }}`
+        وهذا يضمن اختيار العميد الحالي للكلية أو العميد الذي تم اختياره قبل حدوث خطأ في التحقق.
+6.  **`button type="submit"`**: تم تغيير نص زر الإرسال إلى "تحديث الكلية".
+
+**افتراضات:**
+
+*   لديك متغير `$faculty` يتم تمريره إلى هذا العرض من دالة `edit` في `FacultyController` الخاص بك، ويحتوي هذا المتغير على بيانات الكلية التي يتم تعديلها.
+*   لديك متغير `$instructors` يتم تمريره إلى هذا العرض ويحتوي على قائمة بالأساتذة لاختيار العميد (كما هو الحال في ملف `create`).
+*   لديك توجيه (Route) باسم `admin.faculties.update` يستقبل طلبات `PUT` أو `PATCH` لمعالجة تحديث بيانات الكلية.
+*   لديك توجيه (Route) باسم `admin.faculties.index` لعرض قائمة الكليات.
+---
 
 **`resources/views/admin/faculties/create.blade.php` (مثال لصفحة إنشاء)**
 
@@ -15134,3 +15305,11 @@ paths:
 ---
 
 
+---
+
+
+---
+
+
+
+https://darkorange-clam-997807.hostingersite.com/admin/dashboard

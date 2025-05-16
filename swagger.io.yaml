@@ -10,7 +10,7 @@ info:
     name: Proprietary # أو نوع الترخيص المناسب لمشروع التخرج
 
 servers:
-  - url: http://127.0.0.1:8000/api
+  - url: https://darkorange-clam-997807.hostingersite.com/api
     description: Local Development Server (Laravel Artisan Serve)
   # يمكنك إضافة عناوين URL أخرى لبيئات staging أو production هنا
   # - url: https://api.your-university.com/student-guide/v1
@@ -56,22 +56,22 @@ components:
           type: string
           format: url
           nullable: true
-          example: "http://127.0.0.1:8000/api/courses?page=1"
+          example: "https://darkorange-clam-997807.hostingersite.com/api/courses?page=1"
         last:
           type: string
           format: url
           nullable: true
-          example: "http://127.0.0.1:8000/api/courses?page=5"
+          example: "https://darkorange-clam-997807.hostingersite.com/api/courses?page=5"
         prev:
           type: string
           format: url
           nullable: true
-          example: "http://127.0.0.1:8000/api/courses?page=1"
+          example: "https://darkorange-clam-997807.hostingersite.com/api/courses?page=1"
         next:
           type: string
           format: url
           nullable: true
-          example: "http://127.0.0.1:8000/api/courses?page=2"
+          example: "https://darkorange-clam-997807.hostingersite.com/api/courses?page=2"
 
     PaginationMeta:
       type: object
@@ -89,7 +89,7 @@ components:
         path:
           type: string
           format: url
-          example: "http://127.0.0.1:8000/api/courses"
+          example: "https://darkorange-clam-997807.hostingersite.com/api/courses"
         per_page:
           type: integer
           example: 15
@@ -184,7 +184,7 @@ components:
           type: string
           format: url
           nullable: true
-          example: "http://127.0.0.1:8000/storage/instructors/sara.jpg"
+          example: "https://darkorange-clam-997807.hostingersite.com/storage/instructors/sara.jpg"
 
     CourseSummary:
       type: object
@@ -276,7 +276,7 @@ components:
           type: string
           format: url
           nullable: true
-          example: "http://127.0.0.1:8000/storage/students_profiles/ahmad.jpg"
+          example: "https://darkorange-clam-997807.hostingersite.com/storage/students_profiles/ahmad.jpg"
         is_active:
           type: boolean
           example: true
@@ -345,7 +345,7 @@ components:
         url:
           type: string
           format: url
-          example: "http://127.0.0.1:8000/storage/course_resources/lec1_python.pdf"
+          example: "https://darkorange-clam-997807.hostingersite.com/storage/course_resources/lec1_python.pdf"
         type:
           type: string
           example: "lecture_pdf"
@@ -428,7 +428,7 @@ components:
             - id: 1
               title_ar: "المحاضرة الأولى - أساسيات بايثون"
               title_en: "Lecture 1 - Python Basics"
-              url: "http://127.0.0.1:8000/storage/course_resources/lec1_python.pdf"
+              url: "https://darkorange-clam-997807.hostingersite.com/storage/course_resources/lec1_python.pdf"
               type: "lecture_pdf"
               description: "ملف PDF يغطي أساسيات لغة بايثون."
               semester_relevance: "الخريف 2024"
@@ -438,7 +438,7 @@ components:
             - id: 2
               title_ar: "فيديو شرح الدوال"
               title_en: "Functions Explanation Video"
-              url: "http://127.0.0.1:8000/storage/course_resources/video_functions.mp4"
+              url: "https://darkorange-clam-997807.hostingersite.com/storage/course_resources/video_functions.mp4"
               type: "lecture_video"
               description: "فيديو تعليمي يشرح كيفية تعريف واستخدام الدوال في بايثون."
               semester_relevance: "الخريف 2024"
@@ -493,7 +493,7 @@ components:
           type: string
           format: url
           nullable: true
-          example: "http://127.0.0.1:8000/storage/instructors/sara.jpg"
+          example: "https://darkorange-clam-997807.hostingersite.com/storage/instructors/sara.jpg"
         is_active:
           type: boolean
           example: true
@@ -615,7 +615,7 @@ components:
         file_url:
           type: string
           format: url
-          example: "http://127.0.0.1:8000/storage/university_media/lab_network.jpg"
+          example: "https://darkorange-clam-997807.hostingersite.com/storage/university_media/lab_network.jpg"
         media_type:
           $ref: '#/components/schemas/MediaTypeEnum'
         category:
@@ -685,7 +685,7 @@ components:
           type: string
           format: url
           nullable: true
-          example: "http://127.0.0.1:8000/storage/events/flutter_workshop.jpg"
+          example: "https://darkorange-clam-997807.hostingersite.com/storage/events/flutter_workshop.jpg"
         registration_deadline:
           type: string
           format: date-time
@@ -1325,7 +1325,7 @@ paths:
                     - id: 1
                       title_ar: "المحاضرة الأولى - أساسيات بايثون"
                       title_en: "Lecture 1 - Python Basics"
-                      url: "http://127.0.0.1:8000/storage/course_resources/lec1_python.pdf"
+                      url: "https://darkorange-clam-997807.hostingersite.com/storage/course_resources/lec1_python.pdf"
                       type: "lecture_pdf"
                       description: "ملف PDF يغطي أساسيات لغة بايثون."
                       semester_relevance: "الخريف 2024"
@@ -1335,7 +1335,7 @@ paths:
                     - id: 2
                       title_ar: "فيديو شرح الدوال"
                       title_en: "Functions Explanation Video"
-                      url: "http://127.0.0.1:8000/storage/course_resources/video_functions.mp4"
+                      url: "https://darkorange-clam-997807.hostingersite.com/storage/course_resources/video_functions.mp4"
                       type: "lecture_video"
                       description: "فيديو تعليمي يشرح كيفية تعريف واستخدام الدوال في بايثون."
                       semester_relevance: "الخريف 2024"
@@ -1483,7 +1483,7 @@ paths:
                   email: "sara.alahmad@example.com"
                   office_location: "مكتب B203"
                   bio: "نبذة عن الدكتورة سارة، متخصصة في هندسة البرمجيات والذكاء الاصطناعي..."
-                  profile_picture_url: "http://127.0.0.1:8000/storage/instructors/sara.jpg"
+                  profile_picture_url: "https://darkorange-clam-997807.hostingersite.com/storage/instructors/sara.jpg"
                   is_active: true
                   faculty: { id: 1, name_ar: "كلية الهندسة المعلوماتية", name_en: "Faculty of Informatics Engineering" }
                   supervised_projects: # قائمة بمشاريع التخرج التي تشرف عليها
@@ -1725,7 +1725,7 @@ paths:
                     title_en: "New Networking Lab"
                     description_ar: "صورة للمختبر بعد التحديثات الأخيرة."
                     description_en: "Photo of the lab after recent updates."
-                    file_url: "http://127.0.0.1:8000/storage/university_media/lab_network.jpg"
+                    file_url: "https://darkorange-clam-997807.hostingersite.com/storage/university_media/lab_network.jpg"
                     media_type: "image"
                     category: "مخابر"
                     faculty: { id: 1, name_ar: "كلية الهندسة المعلوماتية" }
@@ -1737,7 +1737,7 @@ paths:
                     title_en: "Alpha Auditorium"
                     description_ar: "فيديو للمدرج أثناء فعالية."
                     description_en: "Video of the auditorium during an event."
-                    file_url: "http://127.0.0.1:8000/storage/university_media/auditorium_video.mp4"
+                    file_url: "https://darkorange-clam-997807.hostingersite.com/storage/university_media/auditorium_video.mp4"
                     media_type: "video"
                     category: "مدرجات"
                     faculty: null # مثال لقيمة null إذا لم تكن مرتبطة بكلية
@@ -1815,7 +1815,7 @@ paths:
                   title_en: "New Networking Lab"
                   description_ar: "صورة للمختبر بعد التحديثات الأخيرة، مجهز بأحدث الأجهزة."
                   description_en: "Photo of the lab after recent updates, equipped with the latest devices."
-                  file_url: "http://127.0.0.1:8000/storage/university_media/lab_network.jpg"
+                  file_url: "https://darkorange-clam-997807.hostingersite.com/storage/university_media/lab_network.jpg"
                   media_type: "image"
                   category: "مخابر"
                   faculty: { id: 1, name_ar: "كلية الهندسة المعلوماتية" }
@@ -1877,7 +1877,7 @@ paths:
                     event_end_datetime: "2024-06-15T17:00:00Z"
                     location_text: "القاعة الرئيسية - مبنى B"
                     category: "ورشة عمل"
-                    main_image_url: "http://127.0.0.1:8000/storage/events/flutter_workshop.jpg"
+                    main_image_url: "https://darkorange-clam-997807.hostingersite.com/storage/events/flutter_workshop.jpg"
                     registration_deadline: "2024-06-10T23:59:59Z"
                     requires_registration: true
                     max_attendees: 30
@@ -1948,7 +1948,7 @@ paths:
                   event_end_datetime: "2024-06-15T17:00:00Z"
                   location_text: "القاعة الرئيسية - مبنى B"
                   category: "ورشة عمل"
-                  main_image_url: "http://127.0.0.1:8000/storage/events/flutter_workshop.jpg"
+                  main_image_url: "https://darkorange-clam-997807.hostingersite.com/storage/events/flutter_workshop.jpg"
                   registration_deadline: "2024-06-10T23:59:59Z"
                   requires_registration: true
                   max_attendees: 30
@@ -2170,7 +2170,7 @@ paths:
                   full_name_en: "Ahmad Mohammad"
                   email: "omar.khaled@student.example.com"
                   enrollment_year: 2021
-                  profile_picture_url: "http://127.0.0.1:8000/storage/students_profiles/ahmad.jpg"
+                  profile_picture_url: "https://darkorange-clam-997807.hostingersite.com/storage/students_profiles/ahmad.jpg"
                   is_active: true
                   specialization: { id: 1, name_ar: "هندسة البرمجيات", name_en: "Software Engineering", faculty: { id: 1, name_ar: "كلية الهندسة المعلوماتية" } }
                   created_at: "2021-09-01T08:00:00.000000Z"

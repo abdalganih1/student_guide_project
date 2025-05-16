@@ -18,6 +18,7 @@ return new class extends Migration
             $table->text('description_ar')->nullable();
             $table->text('description_en')->nullable();
             // $table->foreignId('dean_id')->nullable()->constrained('instructors')->nullOnDelete(); // FK to instructors
+            // $table->unsignedBigInteger('dean_id')->nullable(); // يطابق نوع id() في Laravel (BigInteger)
             $table->timestamps();
         });
     }
