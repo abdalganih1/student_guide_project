@@ -10836,3 +10836,860 @@ class CourseResource extends JsonResource // هذا هو Resource لنموذج C
 
 ---
 
+بالتأكيد، سنقوم الآن بتصميم ملف `UpdateEventRequest` ثم ملفات الـ Blade Views الخاصة بإدارة الفعاليات (`Events`).
+
+**أولاً: تصميم ملف `UpdateEventRequest`**
+
+1.  **إنشاء الملف (إذا لم تكن قد أنشأته بالفعل):**
+    ```bash
+    php artisan make:request Admin/UpdateEventRequest
+    ```
+
+2.  **محتوى `app/Http/Requests/Admin/UpdateEventRequest.php`:**
+
+    ```php
+    <?php
+
+    namespace App\Http\Requests\Admin;
+
+    use Illuminate\Foundation\Http\FormRequest;
+    use Illuminate\Support\Facades\Auth;
+    use Illuminate\Validation\Rule;
+
+    class UpdateEventRequest extends FormRequest
+    {
+        /**
+         * Determine if the user is authorized to make this request.
+         */
+        public function authorize(): bool
+        {
+            return Auth::guard('admin_web')->check(); // أو تحقق من صلاحية معينة
+        }
+
+        /**
+         * Get the validation rules that apply to the request.
+         *
+         * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+         */
+        public function rules(): array
+        {
+            // $eventId = $this->route('event')->id; // لا نحتاج عادةً لـ ignore unique هنا لعناوين الفعاليات
+
+            return [
+                'title_ar' => 'required|string|max:255',
+                'title_en' => 'nullable|string|max:255',
+                'description_ar' => 'required|string',
+                'description_en' => 'nullable|string',
+                'event_start_datetime' => 'required|date_format:Y-m-d\TH:i', // للتوافق مع input type="datetime-local"
+                'event_end_datetime' => 'nullable|date_format:Y-m-d\TH:i|after_or_equal:event_start_datetime',
+                'location_text' => 'nullable|string|max:255',
+                'category' => 'nullable|string|max:100',
+                'main_image' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048', // اسم الحقل للملف
+                'remove_main_image' => 'nullable|boolean', // لإزالة الصورة الحالية
+                'registration_deadline' => 'nullable|date_format:Y-m-d\TH:i|before:event_start_datetime',
+                'requires_registration' => 'required|boolean',
+                'max_attendees' => 'nullable|integer|min:0',
+                'organizer_info' => 'nullable|string',
+                'organizing_faculty_id' => 'nullable|exists:faculties,id',
+                'status' => 'required|string|in:scheduled,ongoing,completed,cancelled,draft',
+            ];
+        }
+
+        /**
+         * Get custom messages for validator errors.
+         */
+        public function messages(): array
+        {
+            return [
+                'title_ar.required' => 'عنوان الفعالية باللغة العربية مطلوب.',
+                'description_ar.required' => 'وصف الفعالية باللغة العربية مطلوب.',
+                'event_start_datetime.required' => 'تاريخ ووقت بدء الفعالية مطلوب.',
+                'event_start_datetime.date_format' => 'صيغة تاريخ ووقت البدء غير صحيحة.',
+                'event_end_datetime.date_format' => 'صيغة تاريخ ووقت الانتهاء غير صحيحة.',
+                'event_end_datetime.after_or_equal' => 'تاريخ ووقت الانتهاء يجب أن يكون بعد أو يساوي تاريخ البدء.',
+                'main_image.image' => 'الملف المرفوع يجب أن يكون صورة.',
+                'main_image.mimes' => 'نوع الصورة غير مدعوم.',
+                'main_image.max' => 'حجم الصورة كبير جداً (الحد الأقصى 2MB).',
+                'registration_deadline.date_format' => 'صيغة تاريخ الموعد النهائي للتسجيل غير صحيحة.',
+                'registration_deadline.before' => 'الموعد النهائي للتسجيل يجب أن يكون قبل تاريخ بدء الفعالية.',
+                'requires_registration.required' => 'تحديد ما إذا كانت الفعالية تتطلب تسجيلًا مطلوب.',
+                'max_attendees.integer' => 'الحد الأقصى للحضور يجب أن يكون رقمًا صحيحًا.',
+                'organizing_faculty_id.exists' => 'الكلية المنظمة المحددة غير موجودة.',
+                'status.required' => 'حالة الفعالية مطلوبة.',
+                'status.in' => 'قيمة حالة الفعالية غير صالحة.',
+            ];
+        }
+    }
+    ```
+    **ملاحظة على `main_image`:** في `StoreEventRequest` و `UpdateEventRequest`، تأكد من أن اسم حقل رفع الملف هو `main_image` ليتوافق مع الكود في المتحكم.
+
+---
+
+**ثانياً: تصميم ملفات الـ Blade Views لإدارة الفعاليات**
+
+تأكد من أن لديك المجلد `resources/views/admin/events/`.
+
+1.  **`resources/views/admin/events/index.blade.php`**
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'إدارة الفعاليات والمسابقات')
+
+    @section('content')
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1><i class="fas fa-calendar-alt me-2"></i>إدارة الفعاليات والمسابقات</h1>
+            <a href="{{ route('admin.events.create') }}" class="btn btn-success">
+                <i class="fas fa-plus me-1"></i> إضافة فعالية جديدة
+            </a>
+        </div>
+
+        {{-- قسم الفلترة --}}
+        <div class="card mb-3">
+            <div class="card-body">
+                <form method="GET" action="{{ route('admin.events.index') }}">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-3">
+                            <label for="search_filter" class="form-label">بحث (عنوان، وصف)</label>
+                            <input type="text" class="form-control form-control-sm" id="search_filter" name="search" value="{{ request('search') }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="status_filter" class="form-label">الحالة</label>
+                            <select class="form-select form-select-sm" id="status_filter" name="status">
+                                <option value="">-- كل الحالات --</option>
+                                @foreach($statuses as $statusKey => $statusName)
+                                    <option value="{{ $statusKey }}" {{ request('status') == $statusKey ? 'selected' : '' }}>
+                                        {{ $statusName }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="faculty_id_filter" class="form-label">الكلية المنظمة</label>
+                            <select class="form-select form-select-sm" id="faculty_id_filter" name="faculty_id">
+                                <option value="">-- كل الكليات --</option>
+                                @foreach($faculties as $faculty)
+                                    <option value="{{ $faculty->id }}" {{ request('faculty_id') == $faculty->id ? 'selected' : '' }}>
+                                        {{ $faculty->name_ar }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-primary btn-sm w-100">فلترة</button>
+                        </div>
+                        <div class="col-md-1">
+                            <a href="{{ route('admin.events.index') }}" class="btn btn-secondary btn-sm w-100">إلغاء</a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                @if($events->isEmpty())
+                    <div class="alert alert-info text-center">لا توجد فعاليات لعرضها حالياً.</div>
+                @else
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>الصورة</th>
+                                    <th>العنوان (عربي)</th>
+                                    <th>تاريخ البدء</th>
+                                    <th>الحالة</th>
+                                    <th>الكلية المنظمة</th>
+                                    <th>التسجيل</th>
+                                    <th>الإجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($events as $event)
+                                <tr>
+                                    <td>{{ $event->id }}</td>
+                                    <td>
+                                        @if($event->main_image_url)
+                                            <img src="{{ Storage::url($event->main_image_url) }}" alt="{{ $event->title_ar }}" class="img-thumbnail" style="width: 80px; height: 50px; object-fit: cover;">
+                                        @else
+                                            <i class="fas fa-image fa-2x text-secondary"></i>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        <a href="{{ route('admin.events.show', $event) }}">{{ Str::limit($event->title_ar, 40) }}</a>
+                                        @if($event->title_en)<small class="d-block text-muted">{{ Str::limit($event->title_en, 40) }}</small>@endif
+                                    </td>
+                                    <td>{{ $event->event_start_datetime->translatedFormat('Y-m-d H:i') }}</td>
+                                    <td>
+                                        <span class="badge bg-{{ $event->status == 'scheduled' ? 'info' : ($event->status == 'ongoing' ? 'primary' : ($event->status == 'completed' ? 'success' : ($event->status == 'cancelled' ? 'danger' : 'secondary'))) }}">
+                                            {{ $statuses[$event->status] ?? $event->status }}
+                                        </span>
+                                    </td>
+                                    <td>{{ $event->organizingFaculty->name_ar ?? '-' }}</td>
+                                    <td>{{ $event->requires_registration ? 'مطلوب' : 'غير مطلوب' }}</td>
+                                    <td>
+                                        <a href="{{ route('admin.events.show', $event) }}" class="btn btn-sm btn-info" title="عرض"><i class="fas fa-eye"></i></a>
+                                        <a href="{{ route('admin.events.edit', $event) }}" class="btn btn-sm btn-primary" title="تعديل"><i class="fas fa-edit"></i></a>
+                                        <a href="{{ route('admin.event-registrations.index', ['event_id' => $event->id]) }}" class="btn btn-sm btn-warning" title="طلبات التسجيل"><i class="fas fa-users"></i></a>
+                                        <form action="{{ route('admin.events.destroy', $event) }}" method="POST" class="d-inline" onsubmit="return confirm('هل أنت متأكد من رغبتك في حذف هذه الفعالية؟');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn btn-sm btn-danger" title="حذف"><i class="fas fa-trash"></i></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-3">
+                        {{ $events->appends(request()->query())->links() }}
+                    </div>
+                @endif
+            </div>
+        </div>
+    </div>
+    @endsection
+    ```
+
+2.  **`resources/views/admin/events/create.blade.php`**
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'إضافة فعالية جديدة')
+
+    @push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const registrationDeadlineInput = document.getElementById('registration_deadline');
+            const eventStartDateInput = document.getElementById('event_start_datetime');
+
+            if (eventStartDateInput && registrationDeadlineInput) {
+                eventStartDateInput.addEventListener('change', function() {
+                    registrationDeadlineInput.max = this.value;
+                });
+            }
+        });
+    </script>
+    @endpush
+
+    @section('content')
+    <div class="container-fluid">
+        <h1><i class="fas fa-plus-circle me-2"></i>إضافة فعالية جديدة</h1>
+
+        <div class="card mt-3">
+            <div class="card-body">
+                <form action="{{ route('admin.events.store') }}" method="POST" enctype="multipart/form-data">
+                    @csrf
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="title_ar" class="form-label">العنوان (عربي) <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control @error('title_ar') is-invalid @enderror" id="title_ar" name="title_ar" value="{{ old('title_ar') }}" required>
+                            @error('title_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="title_en" class="form-label">العنوان (إنجليزي)</label>
+                            <input type="text" class="form-control @error('title_en') is-invalid @enderror" id="title_en" name="title_en" value="{{ old('title_en') }}">
+                            @error('title_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description_ar" class="form-label">الوصف (عربي) <span class="text-danger">*</span></label>
+                        <textarea class="form-control @error('description_ar') is-invalid @enderror" id="description_ar" name="description_ar" rows="4" required>{{ old('description_ar') }}</textarea>
+                        @error('description_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description_en" class="form-label">الوصف (إنجليزي)</label>
+                        <textarea class="form-control @error('description_en') is-invalid @enderror" id="description_en" name="description_en" rows="4">{{ old('description_en') }}</textarea>
+                        @error('description_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="event_start_datetime" class="form-label">تاريخ ووقت البدء <span class="text-danger">*</span></label>
+                            <input type="datetime-local" class="form-control @error('event_start_datetime') is-invalid @enderror" id="event_start_datetime" name="event_start_datetime" value="{{ old('event_start_datetime') }}" required>
+                            @error('event_start_datetime') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="event_end_datetime" class="form-label">تاريخ ووقت الانتهاء (اختياري)</label>
+                            <input type="datetime-local" class="form-control @error('event_end_datetime') is-invalid @enderror" id="event_end_datetime" name="event_end_datetime" value="{{ old('event_end_datetime') }}">
+                            @error('event_end_datetime') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="location_text" class="form-label">الموقع (نص)</label>
+                            <input type="text" class="form-control @error('location_text') is-invalid @enderror" id="location_text" name="location_text" value="{{ old('location_text') }}">
+                            @error('location_text') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="category" class="form-label">التصنيف</label>
+                            <input type="text" class="form-control @error('category') is-invalid @enderror" id="category" name="category" value="{{ old('category') }}" placeholder="مثال: ندوة، ورشة عمل">
+                            @error('category') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="main_image" class="form-label">الصورة الرئيسية للفعالية (اختياري)</label>
+                        <input type="file" class="form-control @error('main_image') is-invalid @enderror" id="main_image" name="main_image">
+                        @error('main_image') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="requires_registration" class="form-label">يتطلب تسجيل؟ <span class="text-danger">*</span></label>
+                            <select class="form-select @error('requires_registration') is-invalid @enderror" id="requires_registration" name="requires_registration" required>
+                                <option value="1" {{ old('requires_registration', '0') == '1' ? 'selected' : '' }}>نعم</option>
+                                <option value="0" {{ old('requires_registration', '0') == '0' ? 'selected' : '' }}>لا</option>
+                            </select>
+                            @error('requires_registration') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="registration_deadline" class="form-label">الموعد النهائي للتسجيل (إذا كان مطلوباً)</label>
+                            <input type="datetime-local" class="form-control @error('registration_deadline') is-invalid @enderror" id="registration_deadline" name="registration_deadline" value="{{ old('registration_deadline') }}">
+                            @error('registration_deadline') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="max_attendees" class="form-label">الحد الأقصى للحضور (اختياري)</label>
+                        <input type="number" class="form-control @error('max_attendees') is-invalid @enderror" id="max_attendees" name="max_attendees" value="{{ old('max_attendees') }}" min="0">
+                        @error('max_attendees') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="organizer_info" class="form-label">معلومات الجهة المنظمة (اختياري)</label>
+                        <input type="text" class="form-control @error('organizer_info') is-invalid @enderror" id="organizer_info" name="organizer_info" value="{{ old('organizer_info') }}">
+                        @error('organizer_info') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="organizing_faculty_id" class="form-label">الكلية المنظمة (اختياري)</label>
+                        <select class="form-select @error('organizing_faculty_id') is-invalid @enderror" id="organizing_faculty_id" name="organizing_faculty_id">
+                            <option value="">-- لا يوجد --</option>
+                            @foreach($faculties as $faculty)
+                                <option value="{{ $faculty->id }}" {{ old('organizing_faculty_id') == $faculty->id ? 'selected' : '' }}>
+                                    {{ $faculty->name_ar }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('organizing_faculty_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="status" class="form-label">الحالة <span class="text-danger">*</span></label>
+                        <select class="form-select @error('status') is-invalid @enderror" id="status" name="status" required>
+                            @foreach($statuses as $statusKey => $statusName)
+                                <option value="{{ $statusKey }}" {{ old('status', 'draft') == $statusKey ? 'selected' : '' }}>{{ $statusName }}</option>
+                            @endforeach
+                        </select>
+                        @error('status') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> حفظ الفعالية</button>
+                        <a href="{{ route('admin.events.index') }}" class="btn btn-secondary">إلغاء</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    @endsection
+    ```
+
+3.  **`resources/views/admin/events/edit.blade.php`** (مشابه لـ `create.blade.php` مع ملء القيم الحالية)
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'تعديل الفعالية: ' . $event->title_ar)
+
+    @push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const registrationDeadlineInput = document.getElementById('registration_deadline');
+            const eventStartDateInput = document.getElementById('event_start_datetime');
+
+            function setMaxDeadline() {
+                if (eventStartDateInput.value) {
+                    registrationDeadlineInput.max = eventStartDateInput.value;
+                }
+            }
+
+            if (eventStartDateInput && registrationDeadlineInput) {
+                eventStartDateInput.addEventListener('change', setMaxDeadline);
+                setMaxDeadline(); // Set on page load
+            }
+        });
+    </script>
+    @endpush
+
+    @section('content')
+    <div class="container-fluid">
+        <h1><i class="fas fa-edit me-2"></i>تعديل الفعالية: {{ $event->title_ar }}</h1>
+
+        <div class="card mt-3">
+            <div class="card-body">
+                <form action="{{ route('admin.events.update', $event) }}" method="POST" enctype="multipart/form-data">
+                    @csrf
+                    @method('PUT')
+
+                    {{-- نفس حقول نموذج الإنشاء، ولكن مع ملء القيم من $event --}}
+                    {{-- مثال لحقل العنوان --}}
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="title_ar" class="form-label">العنوان (عربي) <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control @error('title_ar') is-invalid @enderror" id="title_ar" name="title_ar" value="{{ old('title_ar', $event->title_ar) }}" required>
+                            @error('title_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="title_en" class="form-label">العنوان (إنجليزي)</label>
+                            <input type="text" class="form-control @error('title_en') is-invalid @enderror" id="title_en" name="title_en" value="{{ old('title_en', $event->title_en) }}">
+                            @error('title_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description_ar" class="form-label">الوصف (عربي) <span class="text-danger">*</span></label>
+                        <textarea class="form-control @error('description_ar') is-invalid @enderror" id="description_ar" name="description_ar" rows="4" required>{{ old('description_ar', $event->description_ar) }}</textarea>
+                        @error('description_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description_en" class="form-label">الوصف (إنجليزي)</label>
+                        <textarea class="form-control @error('description_en') is-invalid @enderror" id="description_en" name="description_en" rows="4">{{ old('description_en', $event->description_en) }}</textarea>
+                        @error('description_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="event_start_datetime" class="form-label">تاريخ ووقت البدء <span class="text-danger">*</span></label>
+                            <input type="datetime-local" class="form-control @error('event_start_datetime') is-invalid @enderror" id="event_start_datetime" name="event_start_datetime" value="{{ old('event_start_datetime', $event->event_start_datetime ? $event->event_start_datetime->format('Y-m-d\TH:i') : '') }}" required>
+                            @error('event_start_datetime') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="event_end_datetime" class="form-label">تاريخ ووقت الانتهاء (اختياري)</label>
+                            <input type="datetime-local" class="form-control @error('event_end_datetime') is-invalid @enderror" id="event_end_datetime" name="event_end_datetime" value="{{ old('event_end_datetime', $event->event_end_datetime ? $event->event_end_datetime->format('Y-m-d\TH:i') : '') }}">
+                            @error('event_end_datetime') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="location_text" class="form-label">الموقع (نص)</label>
+                            <input type="text" class="form-control @error('location_text') is-invalid @enderror" id="location_text" name="location_text" value="{{ old('location_text', $event->location_text) }}">
+                            @error('location_text') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="category" class="form-label">التصنيف</label>
+                            <input type="text" class="form-control @error('category') is-invalid @enderror" id="category" name="category" value="{{ old('category', $event->category) }}">
+                            @error('category') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="main_image" class="form-label">الصورة الرئيسية للفعالية (اختياري)</label>
+                        <input type="file" class="form-control @error('main_image') is-invalid @enderror" id="main_image" name="main_image">
+                        @error('main_image') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        @if($event->main_image_url)
+                            <div class="mt-2">
+                                <img src="{{ Storage::url($event->main_image_url) }}" alt="الصورة الحالية" style="max-width: 200px; max-height: 150px; object-fit: contain; border:1px solid #ddd; padding:5px;">
+                                <div class="form-check mt-1">
+                                    <input class="form-check-input" type="checkbox" name="remove_main_image" id="remove_main_image" value="1">
+                                    <label class="form-check-label" for="remove_main_image">
+                                        إزالة الصورة الحالية (إذا تم رفع صورة جديدة، سيتم استبدالها تلقائياً)
+                                    </label>
+                                </div>
+                            </div>
+                        @endif
+                    </div>
+
+                    <div class="row">
+                         <div class="col-md-6 mb-3">
+                            <label for="requires_registration" class="form-label">يتطلب تسجيل؟ <span class="text-danger">*</span></label>
+                            <select class="form-select @error('requires_registration') is-invalid @enderror" id="requires_registration" name="requires_registration" required>
+                                <option value="1" {{ old('requires_registration', $event->requires_registration) == '1' ? 'selected' : '' }}>نعم</option>
+                                <option value="0" {{ old('requires_registration', $event->requires_registration) == '0' ? 'selected' : '' }}>لا</option>
+                            </select>
+                            @error('requires_registration') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="registration_deadline" class="form-label">الموعد النهائي للتسجيل (إذا كان مطلوباً)</label>
+                            <input type="datetime-local" class="form-control @error('registration_deadline') is-invalid @enderror" id="registration_deadline" name="registration_deadline" value="{{ old('registration_deadline', $event->registration_deadline ? $event->registration_deadline->format('Y-m-d\TH:i') : '') }}">
+                            @error('registration_deadline') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="max_attendees" class="form-label">الحد الأقصى للحضور (اختياري)</label>
+                        <input type="number" class="form-control @error('max_attendees') is-invalid @enderror" id="max_attendees" name="max_attendees" value="{{ old('max_attendees', $event->max_attendees) }}" min="0">
+                        @error('max_attendees') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="organizer_info" class="form-label">معلومات الجهة المنظمة (اختياري)</label>
+                        <input type="text" class="form-control @error('organizer_info') is-invalid @enderror" id="organizer_info" name="organizer_info" value="{{ old('organizer_info', $event->organizer_info) }}">
+                        @error('organizer_info') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="organizing_faculty_id" class="form-label">الكلية المنظمة (اختياري)</label>
+                        <select class="form-select @error('organizing_faculty_id') is-invalid @enderror" id="organizing_faculty_id" name="organizing_faculty_id">
+                            <option value="">-- لا يوجد --</option>
+                            @foreach($faculties as $faculty)
+                                <option value="{{ $faculty->id }}" {{ old('organizing_faculty_id', $event->organizing_faculty_id) == $faculty->id ? 'selected' : '' }}>
+                                    {{ $faculty->name_ar }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('organizing_faculty_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="status" class="form-label">الحالة <span class="text-danger">*</span></label>
+                        <select class="form-select @error('status') is-invalid @enderror" id="status" name="status" required>
+                             @foreach($statuses as $statusKey => $statusName)
+                                <option value="{{ $statusKey }}" {{ old('status', $event->status) == $statusKey ? 'selected' : '' }}>{{ $statusName }}</option>
+                            @endforeach
+                        </select>
+                        @error('status') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> تحديث الفعالية</button>
+                        <a href="{{ route('admin.events.index') }}" class="btn btn-secondary">إلغاء</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    @endsection
+    ```
+
+4.  **`resources/views/admin/events/show.blade.php`**
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'تفاصيل الفعالية: ' . $event->title_ar)
+
+    @section('content')
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1><i class="fas fa-calendar-check me-2"></i>تفاصيل الفعالية: {{ $event->title_ar }}</h1>
+            <div>
+                <a href="{{ route('admin.events.edit', $event) }}" class="btn btn-primary"><i class="fas fa-edit me-1"></i> تعديل</a>
+                <a href="{{ route('admin.event-registrations.index', ['event_id' => $event->id]) }}" class="btn btn-warning"><i class="fas fa-users me-1"></i> عرض طلبات التسجيل ({{ $event->registeredStudents->count() }})</a>
+                <a href="{{ route('admin.events.index') }}" class="btn btn-secondary">العودة إلى القائمة</a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="row g-0">
+                @if($event->main_image_url)
+                <div class="col-md-4 text-center p-3 border-end">
+                    <img src="{{ Storage::url($event->main_image_url) }}" alt="{{ $event->title_ar }}" class="img-fluid rounded" style="max-height: 300px; object-fit: contain;">
+                </div>
+                @endif
+                <div class="{{ $event->main_image_url ? 'col-md-8' : 'col-md-12' }}">
+                    <div class="card-body">
+                        <h3 class="card-title">{{ $event->title_ar }}</h3>
+                        @if($event->title_en)
+                            <h5 class="text-muted">{{ $event->title_en }}</h5>
+                        @endif
+                        <hr>
+                        <dl class="row">
+                            <dt class="col-sm-4">تاريخ ووقت البدء:</dt>
+                            <dd class="col-sm-8">{{ $event->event_start_datetime->translatedFormat('l, d F Y - H:i A') }}</dd>
+
+                            @if($event->event_end_datetime)
+                            <dt class="col-sm-4">تاريخ ووقت الانتهاء:</dt>
+                            <dd class="col-sm-8">{{ $event->event_end_datetime->translatedFormat('l, d F Y - H:i A') }}</dd>
+                            @endif
+
+                            <dt class="col-sm-4">الموقع:</dt>
+                            <dd class="col-sm-8">{{ $event->location_text ?: '-' }}</dd>
+
+                            <dt class="col-sm-4">التصنيف:</dt>
+                            <dd class="col-sm-8">{{ $event->category ?: '-' }}</dd>
+
+                            <dt class="col-sm-4">الحالة:</dt>
+                            <dd class="col-sm-8">
+                                <span class="badge bg-{{ $event->status == 'scheduled' ? 'info' : ($event->status == 'ongoing' ? 'primary' : ($event->status == 'completed' ? 'success' : ($event->status == 'cancelled' ? 'danger' : 'secondary'))) }}">
+                                    {{ $statuses[$event->status] ?? $event->status }}
+                                </span>
+                            </dd>
+
+                            <dt class="col-sm-4">يتطلب تسجيل:</dt>
+                            <dd class="col-sm-8">{{ $event->requires_registration ? 'نعم' : 'لا' }}</dd>
+
+                            @if($event->requires_registration)
+                            <dt class="col-sm-4">الموعد النهائي للتسجيل:</dt>
+                            <dd class="col-sm-8">{{ $event->registration_deadline ? $event->registration_deadline->translatedFormat('l, d F Y - H:i A') : '-' }}</dd>
+                            @endif
+
+                            <dt class="col-sm-4">الحد الأقصى للحضور:</dt>
+                            <dd class="col-sm-8">{{ $event->max_attendees ?: 'غير محدد' }}</dd>
+
+                            <dt class="col-sm-4">الجهة المنظمة:</dt>
+                            <dd class="col-sm-8">{{ $event->organizer_info ?: ($event->organizingFaculty->name_ar ?? '-') }}</dd>
+
+                            @if($event->organizingFaculty)
+                            <dt class="col-sm-4">الكلية المنظمة:</dt>
+                            <dd class="col-sm-8"><a href="{{ route('admin.faculties.show', $event->organizingFaculty) }}">{{ $event->organizingFaculty->name_ar }}</a></dd>
+                            @endif
+                        </dl>
+                        <hr>
+                        <h5>الوصف (عربي):</h5>
+                        <div style="white-space: pre-wrap;">{{ $event->description_ar }}</div>
+
+                        @if($event->description_en)
+                        <hr>
+                        <h5>الوصف (إنجليزي):</h5>
+                        <div style="white-space: pre-wrap;">{{ $event->description_en }}</div>
+                        @endif
+                        <hr>
+                         <small class="text-muted">
+                            تم إنشاؤه بواسطة: {{ $event->createdByAdmin->name_ar ?? 'غير معروف' }} في {{ $event->created_at->translatedFormat('Y-m-d') }} <br>
+                            آخر تحديث بواسطة: {{ $event->lastUpdatedByAdmin->name_ar ?? 'غير معروف' }} في {{ $event->updated_at->translatedFormat('Y-m-d') }}
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{-- قسم الطلاب المسجلين --}}
+        <div class="card mt-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-users me-2"></i>الطلاب المسجلون ({{ $event->registeredStudents->count() }})</h5>
+                <a href="{{ route('admin.event-registrations.index', ['event_id' => $event->id]) }}" class="btn btn-sm btn-outline-primary">إدارة التسجيلات</a>
+            </div>
+             <div class="card-body">
+                @if($event->registeredStudents->isEmpty())
+                    <p class="text-muted">لا يوجد طلاب مسجلون في هذه الفعالية حالياً.</p>
+                @else
+                    <ul class="list-group list-group-flush">
+                        @foreach($event->registeredStudents as $registration)
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                @if ($registration->student)
+                                    <a href="{{ route('admin.students.show', $registration->student) }}">{{ $registration->student->full_name_ar }}</a>
+                                    <small class="text-muted">({{ $registration->student->student_university_id }})</small>
+                                @else
+                                    <span class="text-danger">طالب محذوف (ID: {{ $registration->student_id }})</span>
+                                @endif
+                                </div>
+                                <div>
+                                    <span class="badge bg-{{ $registration->status == 'registered' || $registration->status == 'approved' ? 'success' : ($registration->status == 'pending_approval' ? 'warning text-dark' : 'danger') }}">
+                                        @if($registration->status == 'registered' || $registration->status == 'approved') تم التسجيل
+                                        @elseif($registration->status == 'pending_approval') قيد المراجعة
+                                        @elseif($registration->status == 'rejected') مرفوض
+                                        @elseif($registration->status == 'waitlisted') قائمة انتظار
+                                        @elseif($registration->status == 'cancelled_by_student') ملغى من الطالب
+                                        @else {{ $registration->status }}
+                                        @endif
+                                    </span>
+                                    @if($registration->attended)
+                                        <span class="badge bg-info">حضر</span>
+                                    @endif
+                                </div>
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+            </div>
+        </div>
+
+    </div>
+    @endsection
+    ```
+    **ملاحظة لـ `show.blade.php`:** ستحتاج إلى تمرير متغير `$statuses` من المتحكم إذا أردت استخدامه لعرض اسم الحالة بشكل مقروء (إذا كان `event->status` لا يُرجع الاسم مباشرة). لقد افترضت أن مصفوفة `$statuses` التي تم تمريرها إلى `index` و `create` و `edit` متوفرة لديك.
+
+---
+بهذا تكون قد حصلت على ملفات الـ Blade Views والـ Form Request الأساسية لإدارة الفعاليات.
+
+
+----
+
+
+الخطأ واضح: `The event start datetime field must match the format Y-m-d H:i:s.` (ونفس الشيء لحقول الانتهاء والموعد النهائي للتسجيل).
+
+هذا يعني أن البيانات التي يتم إرسالها من نموذج HTML الخاص بك لحقول التاريخ والوقت ليست بالتنسيق `YYYY-MM-DD HH:MM:SS` الذي يتوقعه التحقق من الصحة في `StoreEventRequest` و `UpdateEventRequest`.
+
+**السبب:**
+
+حقل الإدخال `type="datetime-local"` في HTML يُرسل البيانات عادةً بتنسيق مشابه لـ `YYYY-MM-DDTHH:MM` (لاحظ حرف `T` الفاصل بين التاريخ والوقت، ولا يوجد ثوانٍ).
+
+في ملفات `StoreEventRequest.php` و `UpdateEventRequest.php`، لديك قواعد التحقق كالتالي:
+
+```php
+'event_start_datetime' => 'required|date_format:Y-m-d H:i:s',
+'event_end_datetime' => 'nullable|date_format:Y-m-d H:i:s|after_or_equal:event_start_datetime',
+'registration_deadline' => 'nullable|date_format:Y-m-d H:i:s|before:event_start_datetime',
+```
+
+هذه القواعد تتوقع وجود الثواني (`:s`)، وحرف `T` غير موجود.
+
+**الحل:**
+
+لديك عدة خيارات لحل هذه المشكلة:
+
+**الخيار 1 (الأسهل والأكثر شيوعًا): تعديل قواعد التحقق لتطابق تنسيق `datetime-local`**
+
+قم بتغيير `date_format` في ملفات `FormRequest` الخاصة بك ليكون `Y-m-d\TH:i`. حرف `T` يجب أن يكون مُهرّبًا بـ `\` (backslash) لأنه حرف خاص في تنسيقات التاريخ.
+
+**`app/Http/Requests/Admin/StoreEventRequest.php` (المعدل):**
+
+```php
+<?php
+
+namespace App\Http\Requests\Admin;
+
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Auth;
+
+class StoreEventRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return Auth::guard('admin_web')->check();
+    }
+
+    public function rules(): array
+    {
+        return [
+            'title_ar' => 'required|string|max:255',
+            'title_en' => 'nullable|string|max:255',
+            'description_ar' => 'required|string',
+            'description_en' => 'nullable|string',
+            'event_start_datetime' => 'required|date_format:Y-m-d\TH:i', // <--- تعديل هنا
+            'event_end_datetime' => 'nullable|date_format:Y-m-d\TH:i|after_or_equal:event_start_datetime', // <--- تعديل هنا
+            'location_text' => 'nullable|string|max:255',
+            'category' => 'nullable|string|max:100',
+            'main_image' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+            'registration_deadline' => 'nullable|date_format:Y-m-d\TH:i|before:event_start_datetime', // <--- تعديل هنا
+            'requires_registration' => 'required|boolean',
+            'max_attendees' => 'nullable|integer|min:0',
+            'organizer_info' => 'nullable|string',
+            'organizing_faculty_id' => 'nullable|exists:faculties,id',
+            'status' => 'required|string|in:scheduled,ongoing,completed,cancelled,draft',
+        ];
+    }
+
+    // ... (بقية الكود ورسائل الخطأ كما هي أو يمكنك تعديلها لتناسب الصيغة الجديدة إذا أردت)
+    public function messages(): array
+    {
+        return [
+            // ...
+            'event_start_datetime.date_format' => 'صيغة تاريخ ووقت البدء غير صحيحة (مثال: 2024-12-31T14:30).',
+            'event_end_datetime.date_format' => 'صيغة تاريخ ووقت الانتهاء غير صحيحة (مثال: 2024-12-31T14:30).',
+            'registration_deadline.date_format' => 'صيغة تاريخ الموعد النهائي للتسجيل غير صحيحة (مثال: 2024-12-31T14:30).',
+            // ...
+        ];
+    }
+}
+```
+
+ونفس التعديل لـ `app/Http/Requests/Admin/UpdateEventRequest.php`:
+
+```php
+<?php
+
+namespace App\Http\Requests\Admin;
+
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
+
+class UpdateEventRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return Auth::guard('admin_web')->check();
+    }
+
+    public function rules(): array
+    {
+        return [
+            'title_ar' => 'required|string|max:255',
+            'title_en' => 'nullable|string|max:255',
+            'description_ar' => 'required|string',
+            'description_en' => 'nullable|string',
+            'event_start_datetime' => 'required|date_format:Y-m-d\TH:i', // <--- تعديل هنا
+            'event_end_datetime' => 'nullable|date_format:Y-m-d\TH:i|after_or_equal:event_start_datetime', // <--- تعديل هنا
+            'location_text' => 'nullable|string|max:255',
+            'category' => 'nullable|string|max:100',
+            'main_image' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+            'remove_main_image' => 'nullable|boolean',
+            'registration_deadline' => 'nullable|date_format:Y-m-d\TH:i|before:event_start_datetime', // <--- تعديل هنا
+            'requires_registration' => 'required|boolean',
+            'max_attendees' => 'nullable|integer|min:0',
+            'organizer_info' => 'nullable|string',
+            'organizing_faculty_id' => 'nullable|exists:faculties,id',
+            'status' => 'required|string|in:scheduled,ongoing,completed,cancelled,draft',
+        ];
+    }
+    // ... (رسائل الخطأ يمكن تعديلها أيضًا)
+}
+```
+
+**الخيار 2: تحويل تنسيق التاريخ في المتحكم قبل التحقق (أقل شيوعًا لهذا الغرض)**
+
+يمكنك استخدام دالة `prepareForValidation()` في `FormRequest` لتحويل البيانات قبل تطبيق قواعد التحقق.
+
+```php
+// في StoreEventRequest.php و UpdateEventRequest.php
+protected function prepareForValidation()
+{
+    if ($this->event_start_datetime) {
+        $this->merge([
+            'event_start_datetime' => str_replace('T', ' ', $this->event_start_datetime) . ':00',
+        ]);
+    }
+    if ($this->event_end_datetime) {
+        $this->merge([
+            'event_end_datetime' => str_replace('T', ' ', $this->event_end_datetime) . ':00',
+        ]);
+    }
+    if ($this->registration_deadline) {
+        $this->merge([
+            'registration_deadline' => str_replace('T', ' ', $this->registration_deadline) . ':00',
+        ]);
+    }
+}
+```
+في هذه الحالة، ستبقي على قواعد التحقق `date_format:Y-m-d H:i:s`. لكن الخيار الأول (تعديل `date_format` ليطابق `datetime-local`) يعتبر أنظف وأكثر مباشرة.
+
+**الخيار 3: استخدام مكتبة JavaScript لاختيار التاريخ والوقت (Date/Time Picker)**
+
+بدلاً من الاعتماد على حقل `datetime-local` الافتراضي، يمكنك استخدام مكتبة JavaScript مثل Flatpickr, Bootstrap Datepicker (مع إضافة الوقت), أو ما شابه. هذه المكتبات تسمح لك بتحديد تنسيق الإرسال إلى الخادم بدقة (مثل `Y-m-d H:i:s`). هذا يعطيك تحكمًا أكبر في تجربة المستخدم وتنسيق البيانات.
+
+**التوصية:**
+
+ابدأ بـ **الخيار الأول** لأنه الأسهل تطبيقًا ويتطلب فقط تعديل قواعد `date_format` في ملفات `FormRequest`.
+
+**ملاحظة مهمة عند عرض التواريخ في نماذج التعديل:**
+
+عندما تعرض تاريخًا من قاعدة البيانات في حقل `datetime-local` في نموذج التعديل، يجب أن يكون بالتنسيق `Y-m-d\TH:i` أيضًا.
+
+في `edit.blade.php` للفعاليات، لديك:
+
+```html
+<input type="datetime-local" class="form-control @error('event_start_datetime') is-invalid @enderror" id="event_start_datetime" name="event_start_datetime" value="{{ old('event_start_datetime', $event->event_start_datetime ? $event->event_start_datetime->format('Y-m-d\TH:i') : '') }}" required>
+```
+هذا الجزء `$event->event_start_datetime->format('Y-m-d\TH:i')` صحيح ويقوم بتنسيق التاريخ بشكل مناسب لحقل `datetime-local`. تأكد من أن هذا التنسيق مستخدم لجميع حقول `datetime-local` في نموذج التعديل.
+
+بعد تطبيق **الخيار الأول**، يجب أن تختفي أخطاء التحقق من صحة تنسيق التاريخ.
+
+
+---
+
+
