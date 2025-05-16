@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Route;
 // Controllers for API
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\SpecializationController as ApiSpecializationController;
-use App\Http\Controllers\Api\CourseController as ApiCourseController;
+use App\Http\Controllers\Api\CourseController as ApiCourseController; // تم استيراده بالفعل
 use App\Http\Controllers\Api\InstructorController as ApiInstructorController;
 use App\Http\Controllers\Api\ProjectController as ApiProjectController;
 use App\Http\Controllers\Api\UniversityFacilityController as ApiUniversityFacilityController;
@@ -30,8 +30,8 @@ Route::get('/specializations/{specialization}', [ApiSpecializationController::cl
 Route::get('/specializations/{specialization}/courses', [ApiCourseController::class, 'getCoursesBySpecialization'])->name('api.specializations.courses');
 
 // Courses
-Route::get('/courses', [ApiCourseController::class, 'index'])->name('api.courses.index'); // يدعم فلترة ?specialization_id=X
-Route::get('/courses/year-level/{yearLevel}', [ApiCourseController::class, 'getCoursesByYearLevel'])->name('api.courses.byYearLevel'); // <<-- جديد: جلب المقررات حسب العام الدراسي
+Route::get('/courses', [ApiCourseController::class, 'index'])->name('api.courses.index');
+Route::get('/courses/year-level/{yearLevel}', [ApiCourseController::class, 'getCoursesByYearLevel'])->name('api.courses.byYearLevel');
 Route::get('/courses/{course}', [ApiCourseController::class, 'show'])->name('api.courses.show');
 
 // Instructors
@@ -39,13 +39,13 @@ Route::get('/instructors', [ApiInstructorController::class, 'index'])->name('api
 Route::get('/instructors/{instructor}', [ApiInstructorController::class, 'show'])->name('api.instructors.show');
 
 // Projects
-Route::get('/projects', [ApiProjectController::class, 'index'])->name('api.projects.index'); // يدعم فلترة ?specialization_id=X&year=YYYY&semester=الخريف
-Route::get('/projects/filter', [ApiProjectController::class, 'filterProjects'])->name('api.projects.filter'); // <<-- جديد: مسار مخصص لفلترة متقدمة للمشاريع (بديل أو مكمل)
+Route::get('/projects', [ApiProjectController::class, 'index'])->name('api.projects.index');
+Route::get('/projects/filter', [ApiProjectController::class, 'filterProjects'])->name('api.projects.filter');
 Route::get('/projects/{project}', [ApiProjectController::class, 'show'])->name('api.projects.show');
 
 // University Facilities
-Route::get('/university-facilities', [ApiUniversityFacilityController::class, 'index'])->name('api.university-facilities.index'); // يدعم فلترة ?category=X&media_type=Y
-Route::get('/university-facilities/category/{categorySlug}', [ApiUniversityFacilityController::class, 'getFacilitiesByCategory'])->name('api.university-facilities.byCategory'); // <<-- جديد: جلب المرافق حسب التصنيف
+Route::get('/university-facilities', [ApiUniversityFacilityController::class, 'index'])->name('api.university-facilities.index');
+Route::get('/university-facilities/category/{categorySlug}', [ApiUniversityFacilityController::class, 'getFacilitiesByCategory'])->name('api.university-facilities.byCategory');
 Route::get('/university-facilities/{universityMedia}', [ApiUniversityFacilityController::class, 'show'])->name('api.university-facilities.show');
 
 // Events
@@ -63,6 +63,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Event Registration
     Route::post('/events/{event}/register', [ApiEventController::class, 'register'])->name('api.events.register');
+
+    // Course Registration/Enrollment <<-- جديد
+    Route::post('/courses/{course}/enroll', [ApiCourseController::class, 'enroll'])->name('api.courses.enroll');
 
     // Notifications
     Route::get('/notifications', [ApiNotificationController::class, 'index'])->name('api.notifications.index');

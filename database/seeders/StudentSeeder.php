@@ -18,7 +18,7 @@ class StudentSeeder extends Seeder
             'full_name_ar' => 'عمر خالد',
             'full_name_en' => 'Omar Khaled',
             'email' => 'omar.khaled@student.example.com',
-            'password_hash' => Hash::make('studentpass'), // كلمة مرور للطالب
+            'password_hash' => Hash::make('password'), // كلمة مرور للطالب
             'specialization_id' => $specSE?->id,
             'enrollment_year' => 2023,
             'is_active' => true,
@@ -29,7 +29,7 @@ class StudentSeeder extends Seeder
             'full_name_ar' => 'ليلى أحمد',
             'full_name_en' => 'Layla Ahmad',
             'email' => 'layla.ahmad@student.example.com',
-            'password_hash' => Hash::make('studentpass'),
+            'password_hash' => Hash::make('password'),
             'specialization_id' => $specSE?->id,
             'enrollment_year' => 2023,
             'is_active' => true,

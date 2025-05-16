@@ -13528,4 +13528,1609 @@ Route::middleware('auth:sanctum')->group(function () {
 
 ---
 
+بالتأكيد، تصميم ملف توثيق API شامل ودقيق أمر بالغ الأهمية. نظرًا لأن إنشاء ملف توثيق OpenAPI (Swagger) كامل بتفاصيل دقيقة لكل مسار واستجابة (مع ملء جميع القيم الوهمية وتجنب الـ nulls) هو عملية طويلة جدًا وتتطلب تكرارًا كثيرًا، سأقوم بتقديم هيكل ومثال مفصل لبعض المسارات الرئيسية. يمكنك بعد ذلك توسيع هذا الهيكل ليشمل جميع مساراتك.
+
+سأستخدم **تنسيق OpenAPI 3.0** في YAML، وهو تنسيق شائع لتوثيق الـ APIs.
+
+**قبل أن أبدأ، هل لديك أي تفضيلات معينة لأداة إنشاء وثائق API (مثل Swagger Editor, Stoplight, Postman Documentation) أو هل تريد فقط ملف YAML خام؟**
+
+في هذه الأثناء، سأبدأ بتصميم جزء من التوثيق مع التركيز على طلباتك:
+
+*   **تضمين جميع المسارات:** سأشمل المسارات التي ناقشناها.
+*   **أشكال الردود:** سأقدم أمثلة لاستجابات JSON.
+*   **تجنب قيم NULL (قدر الإمكان):** سأحاول ملء الحقول بقيم وهمية ذات معنى. في بعض الحالات، قد يكون `null` هو القيمة المنطقية (مثل `title_en` إذا لم يكن موجودًا)، ولكن سأحاول تقليل ذلك.
+*   **بيانات وهمية متعددة للجداول المرتبطة:** سأوضح كيف يمكن أن تبدو الاستجابات مع عناصر متعددة في العلاقات (مثل مشاريع متعددة لمدرس).
+
+---
+
+**مثال لملف توثيق API (OpenAPI 3.0 - YAML) - جزء منه:**
+
+```yaml
+openapi: 3.0.0
+info:
+  title: Student Guide API - National Private University
+  version: v1.0.0
+  description: API for the Student Guide mobile application.
+  contact:
+    name: API Support
+    email: support@example.com # استبدل بالبريد الصحيح
+
+servers:
+  - url: http://127.0.0.1:8000/api # أو الرابط الفعلي لـ API في بيئة الإنتاج
+    description: Local Development Server
+
+components:
+  securitySchemes:
+    bearerAuth: # اسم مخطط الأمان
+      type: http
+      scheme: bearer
+      bearerFormat: JWT # أو أي تنسيق توكن تستخدمه (Sanctum عادةً opaque token)
+
+  schemas:
+    # ---- General Schemas ----
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "The given data was invalid."
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          example:
+            email: ["The email field is required."]
+            password: ["The password field is required."]
+
+    SuccessMessage:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Operation successful."
+
+    PaginationLinks:
+      type: object
+      properties:
+        first:
+          type: string
+          format: url
+          nullable: true
+          example: "http://127.0.0.1:8000/api/courses?page=1"
+        last:
+          type: string
+          format: url
+          nullable: true
+          example: "http://127.0.0.1:8000/api/courses?page=5"
+        prev:
+          type: string
+          format: url
+          nullable: true
+          example: null
+        next:
+          type: string
+          format: url
+          nullable: true
+          example: "http://127.0.0.1:8000/api/courses?page=2"
+
+    PaginationMeta:
+      type: object
+      properties:
+        current_page:
+          type: integer
+          example: 1
+        from:
+          type: integer
+          nullable: true
+          example: 1
+        last_page:
+          type: integer
+          example: 5
+        path:
+          type: string
+          format: url
+          example: "http://127.0.0.1:8000/api/courses"
+        per_page:
+          type: integer
+          example: 15
+        to:
+          type: integer
+          nullable: true
+          example: 15
+        total:
+          type: integer
+          example: 70
+
+    # ---- Model Schemas ----
+    AdminUser:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        username:
+          type: string
+          example: "superadmin"
+        name_ar:
+          type: string
+          example: "المدير العام"
+        name_en:
+          type: string
+          nullable: true
+          example: "Super Administrator"
+        email:
+          type: string
+          format: email
+          example: "superadmin@example.com"
+        role:
+          type: string
+          example: "superadmin"
+        is_active:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-05-17T10:00:00.000000Z"
+
+    Faculty:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name_ar:
+          type: string
+          example: "كلية الهندسة المعلوماتية"
+        name_en:
+          type: string
+          nullable: true
+          example: "Faculty of Informatics Engineering"
+        description_ar:
+          type: string
+          nullable: true
+          example: "وصف الكلية باللغة العربية."
+        description_en:
+          type: string
+          nullable: true
+          example: "Faculty description in English."
+        dean: # يمكن أن يكون هذا InstructorResource مبسط
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: integer
+              example: 5
+            name_ar:
+              type: string
+              example: "د. علي محمد"
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T08:30:00.000000Z"
+
+    Specialization:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name_ar:
+          type: string
+          example: "هندسة البرمجيات"
+        name_en:
+          type: string
+          nullable: true
+          example: "Software Engineering"
+        description_ar:
+          type: string
+          example: "وصف تخصص هندسة البرمجيات باللغة العربية."
+        description_en:
+          type: string
+          nullable: true
+          example: "Description of Software Engineering specialization in English."
+        status:
+          type: string
+          example: "published" # draft, published, archived
+        faculty:
+          $ref: '#/components/schemas/Faculty' # إذا أردت تفاصيل الكلية كاملة
+        courses: # سيكون هذا CourseCollection مصغر أو قائمة من أسماء المقررات
+          type: array
+          items:
+            $ref: '#/components/schemas/CourseSummary' # مثال لنموذج مصغر للمقرر
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-02-01T11:00:00.000000Z"
+
+    CourseSummary: # نموذج مصغر للمقرر لعرضه ضمن الاختصاص
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 101
+        code:
+          type: string
+          example: "CSE101"
+        name_ar:
+          type: string
+          example: "مقدمة في البرمجة"
+        semester_display_info:
+          type: string
+          example: "السنة الأولى / الفصل الأول"
+
+    CourseMaterial: # لـ 'resources' داخل المقرر
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        title_ar:
+          type: string
+          example: "المحاضرة الأولى - مقدمة"
+        title_en:
+          type: string
+          nullable: true
+          example: "Lecture 1 - Introduction"
+        url:
+          type: string
+          format: url
+          example: "https://example.com/path/to/lecture1.pdf"
+        type:
+          type: string
+          example: "lecture_pdf" # lecture_video, assignment, etc.
+        description:
+          type: string
+          nullable: true
+          example: "ملف PDF للمحاضرة الأولى."
+        semester_relevance:
+          type: string
+          nullable: true
+          example: "الخريف 2024"
+        uploaded_by: # AdminUser مبسط
+          type: object
+          properties:
+            username:
+              type: string
+              example: "contentmanager"
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-03-10T14:00:00.000000Z"
+
+    Course:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 101
+        code:
+          type: string
+          example: "CSE101"
+        name_ar:
+          type: string
+          example: "مقدمة في البرمجة"
+        name_en:
+          type: string
+          nullable: true
+          example: "Introduction to Programming"
+        description_ar:
+          type: string
+          nullable: true
+          example: "وصف المقرر باللغة العربية."
+        description_en:
+          type: string
+          nullable: true
+          example: "Course description in English."
+        semester_display_info:
+          type: string
+          example: "السنة الأولى / الفصل الأول"
+        year_level:
+          type: integer
+          nullable: true
+          example: 1
+        credits:
+          type: integer
+          nullable: true
+          example: 3
+        is_enrollable:
+          type: boolean
+          example: true
+        enrollment_capacity:
+          type: integer
+          nullable: true
+          example: 50
+        specialization:
+          $ref: '#/components/schemas/Specialization' # أو SpecializationSummary
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/CourseMaterial'
+        instructors: # بما أنك لا تربط المدرسين مباشرة بالمقررات، قد يكون هذا فارغًا أو يمثل مدرسين مقترحين
+          type: array
+          items:
+            $ref: '#/components/schemas/InstructorSummary' # InstructorSummary سيكون نموذجًا مبسطًا للمدرس
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-03-01T09:00:00.000000Z"
+
+    InstructorSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 5
+        name_ar:
+          type: string
+          example: "د. سارة الأحمد"
+        title:
+          type: string
+          nullable: true
+          example: "محاضر"
+
+    ProjectSummary: # نموذج مصغر لمشاريع التخرج
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        title_ar:
+          type: string
+          example: "مشروع دليل الطالب الذكي"
+        year:
+          type: integer
+          example: 2024
+        semester:
+          type: string
+          example: "الربيع"
+
+    Instructor:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 5
+        name_ar:
+          type: string
+          example: "د. سارة الأحمد"
+        name_en:
+          type: string
+          nullable: true
+          example: "Dr. Sara Alahmad"
+        title:
+          type: string
+          nullable: true
+          example: "محاضر"
+        email:
+          type: string
+          format: email
+          nullable: true
+          example: "sara.alahmad@example.com"
+        office_location:
+          type: string
+          nullable: true
+          example: "مكتب B203"
+        bio:
+          type: string
+          nullable: true
+          example: "نبذة عن الدكتورة سارة..."
+        profile_picture_url:
+          type: string
+          format: url
+          nullable: true
+          example: "http://example.com/path/to/sara.jpg"
+        is_active:
+          type: boolean
+          example: true
+        faculty:
+          $ref: '#/components/schemas/Faculty' # أو FacultySummary
+        supervised_projects: # هنا سيكون لدينا قائمة بمشاريع متعددة
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectSummary' # مثال لبيانات وهمية متعددة أدناه
+
+    Project:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        title_ar:
+          type: string
+          example: "نظام دليل الطالب الذكي للجامعة الوطنية الخاصة"
+        title_en:
+          type: string
+          nullable: true
+          example: "Smart Student Guide System for National Private University"
+        abstract_ar:
+          type: string
+          nullable: true
+          example: "ملخص تفصيلي للمشروع باللغة العربية..."
+        abstract_en:
+          type: string
+          nullable: true
+          example: "Detailed project abstract in English..."
+        year:
+          type: integer
+          example: 2024
+        semester:
+          type: string
+          example: "الربيع" # "الخريف"
+        student_names:
+          type: string
+          nullable: true
+          example: "بتول المحمد, ضياء الأحمد"
+        project_type:
+          type: string
+          nullable: true
+          example: "تطويري"
+        keywords:
+          type: string
+          nullable: true
+          example: "دليل الطالب, لارافيل, تطبيق موبايل, فلاتر"
+        specialization:
+          $ref: '#/components/schemas/Specialization' # أو SpecializationSummary
+        supervisor:
+          $ref: '#/components/schemas/InstructorSummary' # المشرف هو مدرس
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-05-01T12:00:00.000000Z"
+
+    UniversityMedia:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        title_ar:
+          type: string
+          nullable: true
+          example: "مختبر الشبكات الجديد"
+        title_en:
+          type: string
+          nullable: true
+          example: "New Networking Lab"
+        description_ar:
+          type: string
+          nullable: true
+          example: "صورة للمختبر بعد التحديثات الأخيرة."
+        description_en:
+          type: string
+          nullable: true
+          example: "Photo of the lab after recent updates."
+        file_url:
+          type: string
+          format: url
+          example: "http://example.com/media/lab_network.jpg"
+        media_type:
+          type: string
+          example: "image" # image, video, document
+        category:
+          type: string
+          nullable: true
+          example: "مخابر" # قاعات, مرافق جامعية
+        faculty:
+          $ref: '#/components/schemas/Faculty' # أو FacultySummary
+        uploaded_at:
+          type: string
+          format: date-time
+          example: "2024-04-10T10:30:00.000000Z"
+
+    Event:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        title_ar:
+          type: string
+          example: "ورشة عمل حول تطوير تطبيقات فلاتر"
+        title_en:
+          type: string
+          nullable: true
+          example: "Flutter App Development Workshop"
+        description_ar:
+          type: string
+          example: "وصف تفصيلي لورشة العمل وأهدافها."
+        description_en:
+          type: string
+          nullable: true
+          example: "Detailed description of the workshop and its objectives."
+        event_start_datetime:
+          type: string
+          format: date-time
+          example: "2024-06-15T09:00:00Z"
+        event_end_datetime:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2024-06-15T17:00:00Z"
+        location_text:
+          type: string
+          nullable: true
+          example: "القاعة الرئيسية - مبنى B"
+        category:
+          type: string
+          nullable: true
+          example: "ورشة عمل"
+        main_image_url:
+          type: string
+          format: url
+          nullable: true
+          example: "http://example.com/events/flutter_workshop.jpg"
+        registration_deadline:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2024-06-10T23:59:59Z"
+        requires_registration:
+          type: boolean
+          example: true
+        max_attendees:
+          type: integer
+          nullable: true
+          example: 30
+        organizer_info:
+          type: string
+          nullable: true
+          example: "نادي البرمجة بالتعاون مع قسم هندسة البرمجيات"
+        status:
+          type: string
+          example: "scheduled" # scheduled, ongoing, completed, cancelled
+        organizing_faculty:
+          $ref: '#/components/schemas/Faculty' # أو FacultySummary
+        is_registered_by_current_user: # يظهر فقط للطالب المسجل
+          type: boolean
+          example: false
+        current_user_registration_status: # يظهر فقط للطالب المسجل
+          type: string
+          nullable: true
+          example: "pending_approval" # registered, rejected, etc.
+        is_registration_open:
+          type: boolean
+          example: true
+
+    Student:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1001
+        student_university_id:
+          type: string
+          example: "20210001"
+        full_name_ar:
+          type: string
+          example: "أحمد محمد"
+        full_name_en:
+          type: string
+          nullable: true
+          example: "Ahmad Mohammad"
+        email:
+          type: string
+          format: email
+          example: "ahmad.mohammad@student.example.com"
+        enrollment_year:
+          type: integer
+          nullable: true
+          example: 2021
+        profile_picture_url:
+          type: string
+          format: url
+          nullable: true
+          example: "http://example.com/profiles/ahmad.jpg"
+        is_active:
+          type: boolean
+          example: true
+        specialization:
+          $ref: '#/components/schemas/SpecializationSummary'
+        created_at:
+          type: string
+          format: date-time
+          example: "2021-09-01T08:00:00.000000Z"
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        title_ar:
+          type: string
+          example: "تنبيه هام لجميع الطلاب"
+        title_en:
+          type: string
+          nullable: true
+          example: "Important Announcement for All Students"
+        body_ar:
+          type: string
+          example: "نص التنبيه باللغة العربية..."
+        body_en:
+          type: string
+          nullable: true
+          example: "Notification body in English..."
+        type:
+          type: string
+          example: "important_announcement" # general, course_update, event_reminder
+        target_audience_type:
+          type: string
+          example: "all" # all, course_specific, custom_group, individual
+        publish_datetime:
+          type: string
+          format: date-time
+          example: "2024-05-20T10:00:00Z"
+        expiry_datetime:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2024-05-27T10:00:00Z"
+        related_course:
+          $ref: '#/components/schemas/CourseSummary' # إذا كان التنبيه مرتبطًا بمقرر
+          nullable: true
+        related_event:
+          $ref: '#/components/schemas/EventSummary' # إذا كان التنبيه مرتبطًا بفعالية
+          nullable: true
+        sent_by_admin: # AdminUser مبسط
+          type: object
+          nullable: true
+          properties:
+            username:
+              type: string
+              example: "contentmanager"
+        is_read_by_current_user: # يظهر فقط للطالب المسجل
+          type: boolean
+          example: false
+        read_at_by_current_user: # يظهر فقط للطالب المسجل
+          type: string
+          format: date-time
+          nullable: true
+          example: "2024-05-20T10:05:00Z"
+
+    EventSummary: # نموذج مصغر للفعالية
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        title_ar:
+          type: string
+          example: "ورشة عمل فلاتر"
+
+    # ---- Request Body Schemas ----
+    LoginRequest:
+      type: object
+      required:
+        - login_field # أو username/email
+        - password
+      properties:
+        login_field: # أو username/email
+          type: string
+          example: "student20210001" # أو student@example.com
+        password:
+          type: string
+          format: password
+          example: "Str0ngP@ss!"
+        remember:
+          type: boolean
+          example: true
+
+    EventRegistrationApiRequest: # إذا كنت ستستخدمه
+      type: object
+      properties:
+        motivation:
+          type: string
+          nullable: true
+          maxLength: 1000
+          example: "أنا مهتم جدًا بتعلم المزيد عن تطوير التطبيقات."
+
+    StudentProfileUpdateRequest:
+      type: object
+      properties:
+        full_name_ar:
+          type: string
+          maxLength: 255
+          example: "أحمد خالد المحمد"
+        full_name_en:
+          type: string
+          maxLength: 255
+          nullable: true
+          example: "Ahmad Khaled Almohammad"
+        # profile_picture: (سيكون multipart/form-data)
+
+    ChangePasswordRequest:
+      type: object
+      required:
+        - current_password
+        - password
+        - password_confirmation
+      properties:
+        current_password:
+          type: string
+          format: password
+          example: "OldP@ssw0rd"
+        password:
+          type: string
+          format: password
+          example: "NewS3cureP@ss!"
+        password_confirmation:
+          type: string
+          format: password
+          example: "NewS3cureP@ss!"
+
+# --- Paths (Endpoints) ---
+paths:
+  /login:
+    post:
+      tags:
+        - Authentication
+      summary: تسجيل دخول الطالب
+      description: مصادقة الطالب وإرجاع توكن للوصول.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: تسجيل دخول ناجح
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Login successful"
+                  student:
+                    $ref: '#/components/schemas/Student' # بيانات الطالب
+                  token:
+                    type: string
+                    example: "1|abcdefghijklmnopqrstuvwxyz123456"
+        '401':
+          description: بيانات اعتماد غير صحيحة
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: خطأ في التحقق من صحة البيانات المدخلة
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # --- Specializations ---
+  /specializations:
+    get:
+      tags:
+        - Specializations
+      summary: عرض جميع الاختصاصات المنشورة
+      responses:
+        '200':
+          description: قائمة بالاختصاصات
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Specialization'
+                  # يمكنك إضافة links و meta هنا إذا كنت تستخدم التصفح
+
+  /specializations/{specializationId}:
+    get:
+      tags:
+        - Specializations
+      summary: عرض تفاصيل اختصاص معين مع مقرراته
+      parameters:
+        - name: specializationId
+          in: path
+          required: true
+          description: ID الخاص بالاختصاص
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: تفاصيل الاختصاص
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: # إذا كنت تستخدم Resource واحد
+                    $ref: '#/components/schemas/Specialization'
+        '404':
+          description: الاختصاص غير موجود أو غير منشور
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Specialization not found or not published."
+
+  /specializations/{specializationId}/courses:
+    get:
+      tags:
+        - Courses
+        - Specializations
+      summary: عرض مقررات اختصاص معين
+      parameters:
+        - name: specializationId
+          in: path
+          required: true
+          description: ID الخاص بالاختصاص
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: قائمة بمقررات الاختصاص
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Course' # أو CourseSummary
+                  # links & meta للتصفح
+        '404':
+          description: الاختصاص غير موجود أو غير منشور
+
+  # --- Courses ---
+  /courses:
+    get:
+      tags:
+        - Courses
+      summary: عرض جميع المقررات (مع إمكانية الفلترة)
+      parameters:
+        - name: specialization_id
+          in: query
+          required: false
+          description: فلترة حسب ID الاختصاص
+          schema:
+            type: integer
+            example: 1
+        - name: year_level # إذا أضفت هذا الفلتر للمسار الرئيسي
+          in: query
+          required: false
+          description: فلترة حسب مستوى السنة الدراسية
+          schema:
+            type: integer
+            example: 2
+        - name: per_page # للتصفح
+          in: query
+          required: false
+          description: عدد العناصر لكل صفحة
+          schema:
+            type: integer
+            default: 15
+            example: 10
+        - name: page # للتصفح
+          in: query
+          required: false
+          description: رقم الصفحة
+          schema:
+            type: integer
+            default: 1
+            example: 1
+      responses:
+        '200':
+          description: قائمة بالمقررات
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Course'
+                  links:
+                    $ref: '#/components/schemas/PaginationLinks'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+
+  /courses/year-level/{yearLevel}:
+    get:
+      tags:
+        - Courses
+      summary: عرض المقررات حسب مستوى السنة الدراسية
+      parameters:
+        - name: yearLevel
+          in: path
+          required: true
+          description: مستوى السنة الدراسية (1, 2, 3, ...)
+          schema:
+            type: integer
+            example: 1
+        - name: specialization_id
+          in: query
+          required: false
+          description: فلترة إضافية حسب ID الاختصاص
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: قائمة بالمقررات للسنة المحددة
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Course'
+                  # links & meta للتصفح إذا استخدمت paginate
+
+  /courses/{courseId}:
+    get:
+      tags:
+        - Courses
+      summary: عرض تفاصيل مقرر معين مع موارده
+      parameters:
+        - name: courseId
+          in: path
+          required: true
+          description: ID المقرر
+          schema:
+            type: integer
+            example: 101
+      responses:
+        '200':
+          description: تفاصيل المقرر
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Course'
+        '404':
+          description: المقرر غير موجود
+
+  # --- Instructors ---
+  /instructors:
+    get:
+      tags:
+        - Instructors
+      summary: عرض قائمة بأسماء أعضاء هيئة التدريس النشطين
+      responses:
+        '200':
+          description: قائمة بالمدرسين
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InstructorSummary' # أو Instructor كامل إذا أردت
+
+  /instructors/{instructorId}:
+    get:
+      tags:
+        - Instructors
+      summary: عرض تفاصيل مدرس معين
+      parameters:
+        - name: instructorId
+          in: path
+          required: true
+          description: ID المدرس
+          schema:
+            type: integer
+            example: 5
+      responses:
+        '200':
+          description: تفاصيل المدرس
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: # مثال لبيانات متعددة للمشاريع التي يشرف عليها
+                    allOf:
+                      - $ref: '#/components/schemas/Instructor'
+                      - type: object
+                        properties:
+                          supervised_projects:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/ProjectSummary'
+                            example:
+                              - id: 10
+                                title_ar: "تطبيق لحجز المواعيد الطبية"
+                                year: 2023
+                                semester: "الخريف"
+                              - id: 12
+                                title_ar: "نظام إدارة محتوى تعليمي"
+                                year: 2023
+                                semester: "الربيع"
+                              - id: 15
+                                title_ar: "تحليل بيانات وسائل التواصل الاجتماعي"
+                                year: 2024
+                                semester: "الخريف"
+        '404':
+          description: المدرس غير موجود أو غير نشط
+
+  # --- Projects ---
+  /projects:
+    get:
+      tags:
+        - Projects
+      summary: عرض أرشيف مشاريع التخرج (مع إمكانية الفلترة)
+      parameters:
+        - name: specialization_id
+          in: query
+          schema:
+            type: integer
+        - name: year
+          in: query
+          schema:
+            type: integer
+        - name: semester
+          in: query
+          schema:
+            type: string
+            enum: [الخريف, الربيع]
+        - name: keywords
+          in: query
+          schema:
+            type: string
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 15
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+      responses:
+        '200':
+          description: قائمة بمشاريع التخرج
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Project'
+                  links:
+                    $ref: '#/components/schemas/PaginationLinks'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+
+  # يمكنك إضافة مسار /projects/filter إذا أردت منطق فلترة منفصل ومعقد
+
+  /projects/{projectId}:
+    get:
+      tags:
+        - Projects
+      summary: عرض تفاصيل مشروع تخرج معين
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          description: ID المشروع
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: تفاصيل المشروع
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Project'
+        '404':
+          description: المشروع غير موجود
+
+  # --- University Facilities ---
+  /university-facilities:
+    get:
+      tags:
+        - University Facilities
+      summary: عرض وسائط المرافق الجامعية (مع إمكانية الفلترة)
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+            example: "مخابر"
+        - name: media_type
+          in: query
+          schema:
+            type: string
+            enum: [image, video, document]
+            example: "image"
+        - name: faculty_id # إذا أردت الفلترة حسب الكلية
+          in: query
+          schema:
+            type: integer
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 15
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+      responses:
+        '200':
+          description: قائمة بوسائط الجامعة
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UniversityMedia'
+                  links:
+                    $ref: '#/components/schemas/PaginationLinks'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+
+  /university-facilities/category/{categorySlug}:
+    get:
+      tags:
+        - University Facilities
+      summary: عرض وسائط الجامعة حسب التصنيف
+      parameters:
+        - name: categorySlug
+          in: path
+          required: true
+          description: اسم التصنيف (مثل labs, halls)
+          schema:
+            type: string
+            example: "مخابر"
+        - name: media_type
+          in: query
+          schema:
+            type: string
+            enum: [image, video, document]
+      responses:
+        '200':
+          description: قائمة بالوسائط للتصنيف المحدد
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UniversityMedia'
+                  # links & meta
+
+  /university-facilities/{mediaId}:
+    get:
+      tags:
+        - University Facilities
+      summary: عرض تفاصيل وسيط جامعي معين
+      parameters:
+        - name: mediaId
+          in: path
+          required: true
+          description: ID الوسيط
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: تفاصيل الوسيط
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/UniversityMedia'
+        '404':
+          description: الوسيط غير موجود
+
+  # --- Events ---
+  /events:
+    get:
+      tags:
+        - Events
+      summary: عرض الفعاليات والمسابقات المتاحة
+      responses:
+        '200':
+          description: قائمة بالفعاليات
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Event'
+                  # links & meta (إذا استخدمت التصفح)
+
+  /events/{eventId}:
+    get:
+      tags:
+        - Events
+      summary: عرض تفاصيل فعالية معينة
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          description: ID الفعالية
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: تفاصيل الفعالية
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Event'
+        '404':
+          description: الفعالية غير موجودة
+
+  /events/{eventId}/register:
+    post:
+      tags:
+        - Events
+      summary: تقديم طلب تسجيل لفعالية
+      security:
+        - bearerAuth: [] # يتطلب مصادقة
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          description: ID الفعالية
+          schema:
+            type: integer
+            example: 1
+      requestBody: # إذا كنت تتوقع بيانات إضافية
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventRegistrationApiRequest'
+      responses:
+        '201':
+          description: تم تقديم طلب التسجيل بنجاح
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Your registration request has been submitted successfully. It is pending approval."
+                  registration:
+                    $ref: '#/components/schemas/StudentEventRegistration' # افترض وجود هذا الـ schema
+        '400':
+          description: خطأ في الطلب (مثل التسجيل مغلق أو الفعالية ممتلئة)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '401':
+          description: غير مصرح به (الطالب لم يسجل دخوله)
+        '404':
+          description: الفعالية غير موجودة
+        '409':
+          description: الطالب مسجل بالفعل أو لديه طلب معلق
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "You are already registered or have a pending registration for this event."
+
+  # --- Search ---
+  /search:
+    get:
+      tags:
+        - Search
+      summary: البحث الشامل
+      parameters:
+        - name: query
+          in: query
+          required: true
+          description: نص البحث
+          schema:
+            type: string
+            example: "برمجة"
+      responses:
+        '200':
+          description: نتائج البحث
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  specializations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SpecializationSummary'
+                  courses:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CourseSummary'
+                  projects:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProjectSummary'
+                  instructors:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InstructorSummary'
+                  # يمكنك إضافة أقسام أخرى للبحث
+
+  # --- Authenticated User Routes ---
+  /logout:
+    post:
+      tags:
+        - Authentication
+      summary: تسجيل خروج الطالب
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: تم تسجيل الخروج بنجاح
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+        '401':
+          description: غير مصرح به
+
+  /user:
+    get:
+      tags:
+        - Profile
+      summary: جلب بيانات الطالب المسجل دخوله
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: بيانات الطالب
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Student' # بيانات الطالب كاملة
+        '401':
+          description: غير مصرح به
+
+  /profile:
+    get:
+      tags:
+        - Profile
+      summary: عرض ملف الطالب (نفس /user)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: بيانات الطالب
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Student'
+        '401':
+          description: غير مصرح به
+    put:
+      tags:
+        - Profile
+      summary: تحديث بيانات ملف الطالب
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json: # أو multipart/form-data إذا كان هناك رفع صور
+            schema:
+              $ref: '#/components/schemas/StudentProfileUpdateRequest'
+      responses:
+        '200':
+          description: تم تحديث الملف الشخصي بنجاح
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  student:
+                    $ref: '#/components/schemas/Student'
+        '401':
+          description: غير مصرح به
+        '422':
+          description: خطأ في التحقق من صحة البيانات
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /profile/change-password:
+    post:
+      tags:
+        - Profile
+      summary: تغيير كلمة مرور الطالب
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: تم تغيير كلمة المرور بنجاح
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+        '401':
+          description: غير مصرح به
+        '422':
+          description: خطأ في التحقق (مثل كلمة المرور الحالية غير صحيحة)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # --- Notifications (Authenticated) ---
+  /notifications:
+    get:
+      tags:
+        - Notifications
+      summary: جلب تنبيهات الطالب
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 15
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+      responses:
+        '200':
+          description: قائمة بتنبيهات الطالب
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Notification'
+                  links:
+                    $ref: '#/components/schemas/PaginationLinks'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          description: غير مصرح به
+
+  /notifications/{notificationId}/mark-as-read:
+    post:
+      tags:
+        - Notifications
+      summary: وضع علامة "مقروء" على تنبيه معين
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          description: ID التنبيه
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: تم وضع علامة "مقروء" بنجاح
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+        '401':
+          description: غير مصرح به
+        '404':
+          description: التنبيه غير موجود
+
+  /notifications/mark-all-as-read:
+    post:
+      tags:
+        - Notifications
+      summary: وضع علامة "مقروء" على جميع تنبيهات الطالب غير المقروءة
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: تم وضع علامة "مقروء" على جميع التنبيهات بنجاح
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+        '401':
+          description: غير مصرح به
+```
+
+**شرح وتوضيحات:**
+
+*   **الهيكل:** هذا الملف يتبع مواصفات OpenAPI 3.0.
+*   **`info`**: معلومات عامة عن الـ API.
+*   **`servers`**: عناوين URL للخوادم التي تستضيف الـ API.
+*   **`components.securitySchemes`**: تعريف مخطط المصادقة (هنا `bearerAuth` للتوكن).
+*   **`components.schemas`**: هنا يتم تعريف جميع نماذج البيانات (DTOs) المستخدمة في الطلبات والاستجابات.
+    *   **نماذج عامة:** مثل `ErrorResponse`, `SuccessMessage`, `PaginationLinks`, `PaginationMeta`.
+    *   **نماذج الكيانات:** مثل `Specialization`, `Course`, `Instructor`, `Project`, إلخ. لقد حاولت ملء الحقول بقيم وهمية ذات معنى وتجنب `null` حيثما أمكن.
+    *   **نماذج ملخصة (Summary):** مثل `CourseSummary`, `InstructorSummary` تُستخدم عندما لا تحتاج إلى عرض كل تفاصيل الكائن (مثلاً عند عرضه ضمن قائمة لكائن آخر).
+    *   **نماذج الطلبات (Request Bodies):** مثل `LoginRequest`, `ChangePasswordRequest`.
+    *   **مثال على البيانات المتعددة:** في `Instructor`, تم تضمين مثال لـ `supervised_projects` يحتوي على عدة مشاريع.
+*   **`paths`**: هنا يتم تعريف كل مسار (endpoint) من مسارات الـ API.
+    *   **`tags`**: لتصنيف المسارات.
+    *   **`summary` و `description`**: لوصف المسار.
+    *   **`parameters`**: لتعريف بارامترات المسار (path parameters) أو بارامترات الاستعلام (query parameters).
+    *   **`requestBody`**: لوصف جسم الطلب (للـ POST, PUT, PATCH).
+    *   **`responses`**: لوصف الاستجابات المحتملة لكل مسار (مثل 200, 201, 400, 401, 404, 422).
+        *   يتم الإشارة إلى الـ `schemas` المعرفة في `components.schemas` لتحديد شكل الاستجابة.
+    *   **`security`**: لتحديد أن المسار يتطلب مصادقة (باستخدام المخطط المعرف في `securitySchemes`).
+
+**كيفية استخدام هذا الملف:**
+
+1.  **حفظ الملف:** احفظ هذا المحتوى في ملف بامتداد `.yaml` (مثلاً `openapi.yaml`) في جذر مشروعك أو في مجلد مخصص للتوثيق.
+2.  **استخدام محرر/عارض Swagger/OpenAPI:**
+    *   **Swagger Editor (Online):** يمكنك نسخ هذا الكود ولصقه في [editor.swagger.io](editor.swagger.io) لعرضه وتعديله.
+    *   **Swagger UI:** يمكنك دمج Swagger UI في مشروع Laravel الخاص بك لعرض هذا التوثيق بشكل تفاعلي. هناك حزم Laravel تسهل ذلك (مثل `darkaonline/l5-swagger`).
+    *   **Stoplight Studio:** أداة قوية لتصميم وتوثيق الـ APIs.
+    *   **Postman:** يمكن لـ Postman استيراد مواصفات OpenAPI لإنشاء Collections.
+
+**ملاحظات هامة جدًا:**
+
+*   **اكتمال الـ Schemas:** لقد قدمت `schemas` للعديد من النماذج. ستحتاج إلى مراجعتها والتأكد من أنها تعكس بدقة جميع الحقول التي تريد إرجاعها من الـ API Resources الخاصة بك. إذا كان لديك `ResourceCollection`، فستحتاج إلى تحديد أن الاستجابة هي مصفوفة من الـ Resource الفردي مع تضمين `links` و `meta` للتصفح.
+*   **القيم الوهمية (`example`):** القيم الموجودة تحت `example:` هي مجرد أمثلة. يجب أن تجعلها واقعية قدر الإمكان لتعكس البيانات الفعلية التي قد يراها المستخدم.
+*   **الـ Nullability:** انتبه إلى `nullable: true` للحقول التي يمكن أن تكون قيمتها `null`.
+*   **تنسيقات البيانات:** استخدم `format` (مثل `date-time`, `email`, `url`, `password`) حيثما أمكن.
+*   **تحديث مستمر:** وثائق الـ API يجب أن تكون حية ويتم تحديثها مع كل تغيير في الـ API.
+
+هذا الملف يوفر أساسًا قويًا جدًا لتوثيق الـ API الخاص بك. سيتطلب الأمر بعض الجهد الإضافي لملء جميع التفاصيل الدقيقة لكل `schema` و `response`، ولكن الهيكل العام موجود.
+
+
+---
+
 
