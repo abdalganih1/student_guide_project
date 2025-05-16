@@ -76,7 +76,7 @@
 
     <div class="card mt-4">
         <div class="card-header">
-            <h4><i class="fas fa-project-diagram me-2"></i>مشاريع التخرج التابعة لهذا الاختصاص ({{ $specialization->projects->count() }})</h4>
+            <h4><i class="fas fa-project-diagram me-2"></i>المشاريع التابعة لهذا الاختصاص ({{ $specialization->projects->count() }})</h4>
         </div>
         <div class="card-body">
             @if($specialization->projects->isEmpty())

@@ -5,13 +5,13 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Course;
 use App\Models\Specialization;
-use App\Models\Instructor;
+// use App\Models\Instructor; // لم نعد بحاجة إليه هنا بشكل مباشر لإدارة التعيينات
 use App\Models\CourseResource;
 use App\Http\Requests\Admin\StoreCourseRequest;
 use App\Http\Requests\Admin\UpdateCourseRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB; // For course_instructor_assignments
+// use Illuminate\Support\Facades\DB; // لم نعد بحاجة إليه لإدارة التعيينات هنا
 
 class CourseController extends Controller
 {
@@ -50,22 +50,18 @@ class CourseController extends Controller
 
     public function show(Course $course)
     {
-        // Load relationships for display: specialization, instructors assigned, resources, admin creators
+        // تم إزالة 'instructors' من هنا
+        // وتم إزالة 'availableInstructors'
         $course->load([
             'specialization',
-            'instructors' => function ($query) { // Get instructors assigned in any semester
-                 $query->orderBy('name_ar');
-            },
             'resources' => function ($query) {
                  $query->orderBy('created_at', 'desc');
             },
             'createdByAdmin',
             'lastUpdatedByAdmin'
         ]);
-        // Also load instructors available for assignment form
-        $availableInstructors = Instructor::where('is_active', true)->orderBy('name_ar')->get();
 
-        return view('admin.courses.show', compact('course', 'availableInstructors'));
+        return view('admin.courses.show', compact('course'));
     }
 
     public function edit(Course $course)
@@ -86,33 +82,29 @@ class CourseController extends Controller
 
     public function destroy(Course $course)
     {
-        if ($course->resources()->exists() || $course->enrolledStudents()->exists() || $course->instructors()->exists()) {
+        // تم إزالة التحقق من 'instructors'
+        if ($course->resources()->exists() || $course->enrolledStudents()->exists()) {
              return redirect()->route('admin.courses.index')
-                              ->with('error', 'لا يمكن حذف المقرر لوجود موارد أو طلاب مسجلين أو مدرسين معينين مرتبطين به.');
+                              ->with('error', 'لا يمكن حذف المقرر لوجود موارد أو طلاب مسجلين مرتبطين به.');
         }
         try {
-            // Delete related assignments manually if needed or rely on cascade (check migration)
-            // DB::table('course_instructor_assignments')->where('course_id', $course->id)->delete();
             $course->delete();
             return redirect()->route('admin.courses.index')
                              ->with('success', 'تم حذف المقرر بنجاح.');
         } catch (\Illuminate\Database\QueryException $e) {
             return redirect()->route('admin.courses.index')
-                             ->with('error', 'حدث خطأ أثناء الحذف.');
+                             ->with('error', 'حدث خطأ أثناء الحذف: ' . $e->getMessage());
         }
     }
 
-    // --- Additional methods for managing resources and assignments ---
+    // --- Additional methods for managing resources ---
 
-    /**
-     * Add a resource to a course.
-     */
     public function addResource(Request $request, Course $course)
     {
         $validated = $request->validate([
             'title_ar' => 'required|string|max:255',
             'title_en' => 'nullable|string|max:255',
-            'url' => 'required|string|max:512', // Consider 'file' type validation if uploading
+            'url' => 'required|string|max:512',
             'type' => 'required|string|max:50',
             'description' => 'nullable|string',
             'semester_relevance' => 'nullable|string|max:50',
@@ -126,70 +118,12 @@ class CourseController extends Controller
                          ->with('success', 'تمت إضافة المورد بنجاح.');
     }
 
-    /**
-     * Remove a resource from a course.
-     */
     public function removeResource(Course $course, CourseResource $resource)
     {
-        // Optional: Add authorization check if needed
-        $resource->delete(); // Assumes CourseResource model exists
+        $resource->delete();
         return redirect()->route('admin.courses.show', $course)
                          ->with('success', 'تم حذف المورد بنجاح.');
     }
 
-    /**
-     * Assign an instructor to a course for a specific semester.
-     */
-    public function assignInstructor(Request $request, Course $course)
-    {
-        $validated = $request->validate([
-            'instructor_id' => 'required|exists:instructors,id',
-            'semester_of_assignment' => 'required|string|max:50',
-            'role_in_course' => 'nullable|string|max:50',
-        ]);
-
-        // Check if assignment already exists
-        $exists = DB::table('course_instructor_assignments')
-                      ->where('course_id', $course->id)
-                      ->where('instructor_id', $validated['instructor_id'])
-                      ->where('semester_of_assignment', $validated['semester_of_assignment'])
-                      ->exists();
-
-        if ($exists) {
-             return redirect()->route('admin.courses.show', $course)
-                              ->with('error', 'المدرس معين بالفعل لهذا المقرر في هذا الفصل.');
-        }
-
-        DB::table('course_instructor_assignments')->insert([
-            'course_id' => $course->id,
-            'instructor_id' => $validated['instructor_id'],
-            'semester_of_assignment' => $validated['semester_of_assignment'],
-            'role_in_course' => $validated['role_in_course'] ?? 'Lecturer',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        return redirect()->route('admin.courses.show', $course)
-                         ->with('success', 'تم تعيين المدرس للمقرر بنجاح.');
-    }
-
-     /**
-     * Remove an instructor assignment from a course.
-     */
-    public function removeAssignment(Course $course, Request $request)
-    {
-         $validated = $request->validate([
-            'instructor_id' => 'required|exists:instructors,id',
-            'semester_of_assignment' => 'required|string|max:50',
-        ]);
-
-        DB::table('course_instructor_assignments')
-              ->where('course_id', $course->id)
-              ->where('instructor_id', $validated['instructor_id'])
-              ->where('semester_of_assignment', $validated['semester_of_assignment'])
-              ->delete();
-
-         return redirect()->route('admin.courses.show', $course)
-                         ->with('success', 'تم حذف تعيين المدرس بنجاح.');
-    }
+    // --- تم حذف دوال assignInstructor و removeAssignment ---
 }

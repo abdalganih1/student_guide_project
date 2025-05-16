@@ -28,7 +28,7 @@
         </li>
         <li class="nav-item">
             <a class="nav-link {{ request()->routeIs('admin.projects.*') ? 'active' : '' }}" href="{{ route('admin.projects.index') }}">
-                <i class="fas fa-project-diagram me-2"></i>إدارة مشاريع التخرج
+                <i class="fas fa-project-diagram me-2"></i>إدارة المشاريع
             </a>
         </li>
         <li class="nav-item">

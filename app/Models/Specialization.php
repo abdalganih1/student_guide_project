@@ -35,7 +35,7 @@ class Specialization extends Model
         return $this->hasMany(Course::class);
     }
 
-    public function projects() // مشاريع التخرج
+    public function projects() // المشاريع
     {
         return $this->hasMany(Project::class);
     }

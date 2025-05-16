@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Project; // اسم النموذج لمشاريع التخرج
+use App\Models\Project; // اسم النموذج لالمشاريع
 use App\Models\Specialization;
 use App\Models\Instructor;
 use App\Http\Requests\Admin\StoreProjectRequest; // ستحتاج لإنشاء هذا

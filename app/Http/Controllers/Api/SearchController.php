@@ -40,7 +40,7 @@ class SearchController extends Controller
                   ->orWhere('description_ar', 'like', "%{$query}%");
             })->take(5)->get();
 
-        // البحث في مشاريع التخرج
+        // البحث في المشاريع
         $results['projects'] = Project::where(function ($q) use ($query) {
                 $q->where('title_ar', 'like', "%{$query}%")
                   ->orWhere('title_en', 'like', "%{$query}%")

@@ -39,7 +39,7 @@ Route::get('/courses/{course}', [ApiCourseController::class, 'show']);
 Route::get('/instructors', [ApiInstructorController::class, 'index']);
 Route::get('/instructors/{instructor}', [ApiInstructorController::class, 'show']); // اختياري إذا كان هناك صفحة لملفه الشخصي
 
-Route::get('/projects', [ApiProjectController::class, 'index']); // أرشيف مشاريع التخرج
+Route::get('/projects', [ApiProjectController::class, 'index']); // أرشيف المشاريع
 Route::get('/projects/{project}', [ApiProjectController::class, 'show']);
 
 Route::get('/university-facilities', [ApiUniversityFacilityController::class, 'index']);

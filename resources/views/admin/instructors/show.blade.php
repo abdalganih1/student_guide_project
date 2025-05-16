@@ -69,7 +69,7 @@
 
     <div class="card mt-4">
         <div class="card-header">
-            <h4><i class="fas fa-graduation-cap me-2"></i>مشاريع التخرج التي يشرف عليها ({{ $instructor->supervisedProjects->count() }})</h4>
+            <h4><i class="fas fa-graduation-cap me-2"></i>المشاريع التي يشرف عليها ({{ $instructor->supervisedProjects->count() }})</h4>
         </div>
         <div class="card-body">
              @if($instructor->supervisedProjects->isEmpty())

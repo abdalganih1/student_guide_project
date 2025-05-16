@@ -11,7 +11,7 @@ use App\Http\Controllers\Admin\FacultyController as AdminFacultyController;
 use App\Http\Controllers\Admin\SpecializationController as AdminSpecializationController;
 use App\Http\Controllers\Admin\InstructorController as AdminInstructorController;
 use App\Http\Controllers\Admin\CourseController as AdminCourseController;
-use App\Http\Controllers\Admin\ProjectController as AdminProjectController; // لمشاريع التخرج
+use App\Http\Controllers\Admin\ProjectController as AdminProjectController; // لالمشاريع
 use App\Http\Controllers\Admin\UniversityFacilityController as AdminUniversityFacilityController;
 use App\Http\Controllers\Admin\EventController as AdminEventController;
 use App\Http\Controllers\Admin\StudentController as AdminStudentController;
@@ -55,8 +55,12 @@ Route::prefix('admin')->name('admin.')->middleware('auth:admin_web')->group(func
     Route::resource('faculties', AdminFacultyController::class); // لإدارة الكليات
     Route::resource('specializations', AdminSpecializationController::class);
     Route::resource('instructors', AdminInstructorController::class);
+    // Course Routes (مع مسارات الموارد)
     Route::resource('courses', AdminCourseController::class);
-    Route::resource('projects', AdminProjectController::class); // لمشاريع التخرج
+    Route::post('courses/{course}/resources', [AdminCourseController::class, 'addResource'])->name('courses.resources.add');
+    Route::delete('courses/{course}/resources/{resource}', [AdminCourseController::class, 'removeResource'])->name('courses.resources.remove');
+    // تم حذف مسارات assignments من هناRoute::resource('projects', AdminProjectController::class); // لالمشاريع
+    Route::resource('projects', AdminProjectController::class);
     Route::resource('university-facilities', AdminUniversityFacilityController::class); // لإدارة الوسائط (الصور والفيديو)
     Route::resource('events', AdminEventController::class);
     Route::resource('students', AdminStudentController::class); // لإدارة بيانات الطلاب

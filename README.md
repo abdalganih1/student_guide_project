@@ -520,7 +520,7 @@ return new class extends Migration
 
 ---
 
-**10. ملف هجرة `Projects` (مشاريع التخرج):**
+**10. ملف هجرة `Projects` (المشاريع):**
     اسم النموذج `Project`، لذا الجدول سيكون `projects`.
     افتح الملف `xxxx_xx_xx_xxxxxx_create_projects_table.php` وقم بتعديله:
 
@@ -1199,7 +1199,7 @@ class Specialization extends Model
         return $this->hasMany(Course::class);
     }
 
-    public function projects() // مشاريع التخرج
+    public function projects() // المشاريع
     {
         return $this->hasMany(Project::class);
     }
@@ -1410,7 +1410,7 @@ class CourseResource extends Model
 }
 ```
 
-**7. `app/Models/Project.php` (لمشاريع التخرج)**
+**7. `app/Models/Project.php` (لالمشاريع)**
 
 ```php
 <?php
@@ -1829,7 +1829,7 @@ php artisan make:seeder StudentSeeder
 # 9. StudentCourseEnrollments (يعتمد على Students و Courses)
 php artisan make:seeder StudentCourseEnrollmentSeeder
 
-# 10. Projects (مشاريع التخرج - تعتمد على Specializations و Instructors)
+# 10. Projects (المشاريع - تعتمد على Specializations و Instructors)
 php artisan make:seeder ProjectSeeder
 
 # 11. Events (قد تعتمد على Faculties و AdminUsers)
@@ -2577,7 +2577,7 @@ php artisan migrate:fresh --seed
 *   **الوظائف الرئيسية (Use Cases) التي ستتحول إلى دوال في المتحكمات:**
 
     *   **للطالب/الضيف (API Controllers):**
-        *   عرض أرشيف مشاريع التخرج (مع تحديث الفصل)
+        *   عرض أرشيف المشاريع (مع تحديث الفصل)
         *   عرض تفاصيل المقرر (مع أسئلة الدورات PDF)
         *   تسجيل الدخول
         *   عرض الخطة الدراسية للاختصاص
@@ -2587,14 +2587,14 @@ php artisan migrate:fresh --seed
         *   البحث عن معلومات (اختصاص، مقرر، مشروع..)
         *   عرض صور المرافق الجامعية (الكليات وغيرها)
         *   عرض أسماء المقررات
-        *   عرض أسماء مشاريع التخرج فقط
+        *   عرض أسماء المشاريع فقط
         *   استلام إشعارات التحديثات الهامة
         *   تقديم طلب تسجيل لفعالية/مسابقة
 
     *   **لمدير النظام (Admin Web Controllers):**
         *   مراجعة طلبات التسجيل المقدمة للفعاليات
         *   إدارة الفعاليات والمسابقات
-        *   إدارة أرشيف مشاريع التخرج (مع تحديث الفصل)
+        *   إدارة أرشيف المشاريع (مع تحديث الفصل)
         *   إدارة صور المرافق الجامعية
         *   إدارة بيانات الكادر التدريسي (الأسماء والمعلومات الأساسية)
         *   إدارة المقررات الدراسية (بما في ذلك ملفات PDF للدورات)
@@ -2642,7 +2642,7 @@ php artisan make:controller Admin/FacultyController # لإدارة الكليا�
 php artisan make:controller Admin/SpecializationController --resource # --resource لإنشاء دوال CRUD
 php artisan make:controller Admin/InstructorController --resource # للمدرسين
 php artisan make:controller Admin/CourseController --resource
-php artisan make:controller Admin/ProjectController --resource # لمشاريع التخرج
+php artisan make:controller Admin/ProjectController --resource # لالمشاريع
 php artisan make:controller Admin/UniversityFacilityController --resource
 php artisan make:controller Admin/EventController --resource
 php artisan make:controller Admin/StudentController --resource # لإدارة بيانات الطلاب
@@ -2872,7 +2872,7 @@ class InstructorController extends Controller
 }
 ```
 
-**`Api/ProjectController.php`** (لمشاريع التخرج)
+**`Api/ProjectController.php`** (لالمشاريع)
 
 ```php
 <?php
@@ -2888,7 +2888,7 @@ use App\Http\Resources\ProjectCollection;
 class ProjectController extends Controller
 {
     /**
-     * عرض أرشيف مشاريع التخرج مع إمكانية الفلترة.
+     * عرض أرشيف المشاريع مع إمكانية الفلترة.
      * "عرض عنوان المشروع، الاختصاص، سنة التقديم، تحديد الفصل الدراسي (أول/ثاني) الذي قدم فيه المشروع."
      * "مع تحديث الفصل" -> يعني أن البيانات المعروضة يجب أن تكون محدثة.
      */
@@ -3112,7 +3112,7 @@ class SearchController extends Controller
                   ->orWhere('description_ar', 'like', "%{$query}%");
             })->take(5)->get();
 
-        // البحث في مشاريع التخرج
+        // البحث في المشاريع
         $results['projects'] = Project::where(function ($q) use ($query) {
                 $q->where('title_ar', 'like', "%{$query}%")
                   ->orWhere('title_en', 'like', "%{$query}%")
@@ -3870,7 +3870,7 @@ Route::get('/courses/{course}', [ApiCourseController::class, 'show']);
 Route::get('/instructors', [ApiInstructorController::class, 'index']);
 Route::get('/instructors/{instructor}', [ApiInstructorController::class, 'show']); // اختياري إذا كان هناك صفحة لملفه الشخصي
 
-Route::get('/projects', [ApiProjectController::class, 'index']); // أرشيف مشاريع التخرج
+Route::get('/projects', [ApiProjectController::class, 'index']); // أرشيف المشاريع
 Route::get('/projects/{project}', [ApiProjectController::class, 'show']);
 
 Route::get('/university-facilities', [ApiUniversityFacilityController::class, 'index']);
@@ -3925,7 +3925,7 @@ use App\Http\Controllers\Admin\FacultyController as AdminFacultyController;
 use App\Http\Controllers\Admin\SpecializationController as AdminSpecializationController;
 use App\Http\Controllers\Admin\InstructorController as AdminInstructorController;
 use App\Http\Controllers\Admin\CourseController as AdminCourseController;
-use App\Http\Controllers\Admin\ProjectController as AdminProjectController; // لمشاريع التخرج
+use App\Http\Controllers\Admin\ProjectController as AdminProjectController; // لالمشاريع
 use App\Http\Controllers\Admin\UniversityFacilityController as AdminUniversityFacilityController;
 use App\Http\Controllers\Admin\EventController as AdminEventController;
 use App\Http\Controllers\Admin\StudentController as AdminStudentController;
@@ -3970,7 +3970,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth:admin_web')->group(func
     Route::resource('specializations', AdminSpecializationController::class);
     Route::resource('instructors', AdminInstructorController::class);
     Route::resource('courses', AdminCourseController::class);
-    Route::resource('projects', AdminProjectController::class); // لمشاريع التخرج
+    Route::resource('projects', AdminProjectController::class); // لالمشاريع
     Route::resource('university-facilities', AdminUniversityFacilityController::class); // لإدارة الوسائط (الصور والفيديو)
     Route::resource('events', AdminEventController::class);
     Route::resource('students', AdminStudentController::class); // لإدارة بيانات الطلاب
@@ -4385,7 +4385,7 @@ class InstructorResource extends JsonResource
 
 **(بنفس الطريقة، ستحتاج إلى إنشاء ملفات API Resources لبقية النماذج مثل `ProjectResource`, `EventResource`, `NotificationResource`, `StudentResource`, إلخ. مع تحديد الحقول التي تريد عرضها في الـ API.)**
 
-**مثال لـ `ProjectResource.php` (لمشاريع التخرج):**
+**مثال لـ `ProjectResource.php` (لالمشاريع):**
 
 ```php
 <?php
@@ -5742,7 +5742,7 @@ class EventController extends Controller
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Project; // اسم النموذج لمشاريع التخرج
+use App\Models\Project; // اسم النموذج لالمشاريع
 use App\Models\Specialization;
 use App\Models\Instructor;
 use App\Http\Requests\Admin\StoreProjectRequest; // ستحتاج لإنشاء هذا
@@ -6540,7 +6540,7 @@ class AdminUserResource extends JsonResource
         </li>
         <li class="nav-item">
             <a class="nav-link {{ request()->routeIs('admin.projects.*') ? 'active' : '' }}" href="{{ route('admin.projects.index') }}">
-                <i class="fas fa-project-diagram me-2"></i>إدارة مشاريع التخرج
+                <i class="fas fa-project-diagram me-2"></i>إدارة المشاريع
             </a>
         </li>
         <li class="nav-item">
@@ -8169,7 +8169,7 @@ php artisan make:view admin.admin_users.edit
 
         <div class="card mt-4">
             <div class="card-header">
-                <h4><i class="fas fa-project-diagram me-2"></i>مشاريع التخرج التابعة لهذا الاختصاص ({{ $specialization->projects->count() }})</h4>
+                <h4><i class="fas fa-project-diagram me-2"></i>المشاريع التابعة لهذا الاختصاص ({{ $specialization->projects->count() }})</h4>
             </div>
             <div class="card-body">
                 @if($specialization->projects->isEmpty())
@@ -8875,7 +8875,7 @@ php artisan make:view admin.admin_users.edit
 
         <div class="card mt-4">
             <div class="card-header">
-                <h4><i class="fas fa-graduation-cap me-2"></i>مشاريع التخرج التي يشرف عليها ({{ $instructor->supervisedProjects->count() }})</h4>
+                <h4><i class="fas fa-graduation-cap me-2"></i>المشاريع التي يشرف عليها ({{ $instructor->supervisedProjects->count() }})</h4>
             </div>
             <div class="card-body">
                  @if($instructor->supervisedProjects->isEmpty())
@@ -9098,7 +9098,7 @@ class InstructorController extends Controller
 
     <div class="card mt-4">
         <div class="card-header">
-            <h4><i class="fas fa-graduation-cap me-2"></i>مشاريع التخرج التي يشرف عليها ({{ $instructor->supervisedProjects->count() }})</h4>
+            <h4><i class="fas fa-graduation-cap me-2"></i>المشاريع التي يشرف عليها ({{ $instructor->supervisedProjects->count() }})</h4>
         </div>
         <div class="card-body">
              @if($instructor->supervisedProjects->isEmpty())
@@ -9130,6 +9130,561 @@ class InstructorController extends Controller
 
 بهذه التعديلات، يجب أن يعمل عرض تفاصيل المدرس وحذفه بشكل صحيح دون محاولة الوصول إلى علاقة `courseAssignments` غير المعرفة.
 
+
+
+---
+
+تمام، بناءً على أنك لا تريد ربط المدرسين بالمقررات بشكل مباشر (أي لا توجد علاقة مباشرة بين `Course` و `Instructor` في نموذج `Course` أو من خلال جدول ربط `course_instructor_assignments` يديره هذا المتحكم)، سنقوم بإجراء التعديلات اللازمة على متحكم `CourseController` وملف `show.blade.php` الخاص بالمقررات.
+
+**التعديلات المطلوبة:**
+
+1.  **في `CourseController`:**
+    *   **`show()`:** سنزيل تحميل علاقة `instructors` و متغير `availableInstructors`.
+    *   **`destroy()`:** سنزيل التحقق من `|| $course->instructors()->exists()`.
+    *   سنحذف الدوال `assignInstructor` و `removeAssignment` بالكامل لأنها لم تعد ذات صلة.
+2.  **في `resources/views/admin/courses/show.blade.php`:**
+    *   سنحذف القسم الخاص بـ "المدرسون المعينون للمقرر" بالكامل.
+3.  **في `routes/web.php`:**
+    *   سنحذف المسارات الخاصة بـ `courses.assignments.assign` و `courses.assignments.remove`.
+
+---
+
+**1. تعديل `app/Http/Controllers/Admin/CourseController.php`:**
+
+```php
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\Course;
+use App\Models\Specialization;
+// use App\Models\Instructor; // لم نعد بحاجة إليه هنا بشكل مباشر لإدارة التعيينات
+use App\Models\CourseResource;
+use App\Http\Requests\Admin\StoreCourseRequest;
+use App\Http\Requests\Admin\UpdateCourseRequest;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+// use Illuminate\Support\Facades\DB; // لم نعد بحاجة إليه لإدارة التعيينات هنا
+
+class CourseController extends Controller
+{
+    public function __construct()
+    {
+        $this->middleware('auth:admin_web');
+    }
+
+    public function index(Request $request)
+    {
+        $query = Course::with('specialization')->latest();
+        if ($request->filled('specialization_id')) {
+            $query->where('specialization_id', $request->specialization_id);
+        }
+        $courses = $query->paginate(15);
+        $specializations = Specialization::orderBy('name_ar')->get(['id', 'name_ar']);
+        return view('admin.courses.index', compact('courses', 'specializations'));
+    }
+
+    public function create()
+    {
+        $specializations = Specialization::orderBy('name_ar')->get(['id', 'name_ar']);
+        return view('admin.courses.create', compact('specializations'));
+    }
+
+    public function store(StoreCourseRequest $request)
+    {
+        $validatedData = $request->validated();
+        $validatedData['created_by_admin_id'] = Auth::guard('admin_web')->id();
+        $validatedData['last_updated_by_admin_id'] = Auth::guard('admin_web')->id();
+
+        Course::create($validatedData);
+        return redirect()->route('admin.courses.index')
+                         ->with('success', 'تم إنشاء المقرر بنجاح.');
+    }
+
+    public function show(Course $course)
+    {
+        // تم إزالة 'instructors' من هنا
+        // وتم إزالة 'availableInstructors'
+        $course->load([
+            'specialization',
+            'resources' => function ($query) {
+                 $query->orderBy('created_at', 'desc');
+            },
+            'createdByAdmin',
+            'lastUpdatedByAdmin'
+        ]);
+
+        return view('admin.courses.show', compact('course'));
+    }
+
+    public function edit(Course $course)
+    {
+        $specializations = Specialization::orderBy('name_ar')->get(['id', 'name_ar']);
+        return view('admin.courses.edit', compact('course', 'specializations'));
+    }
+
+    public function update(UpdateCourseRequest $request, Course $course)
+    {
+        $validatedData = $request->validated();
+        $validatedData['last_updated_by_admin_id'] = Auth::guard('admin_web')->id();
+
+        $course->update($validatedData);
+        return redirect()->route('admin.courses.index')
+                         ->with('success', 'تم تحديث المقرر بنجاح.');
+    }
+
+    public function destroy(Course $course)
+    {
+        // تم إزالة التحقق من 'instructors'
+        if ($course->resources()->exists() || $course->enrolledStudents()->exists()) {
+             return redirect()->route('admin.courses.index')
+                              ->with('error', 'لا يمكن حذف المقرر لوجود موارد أو طلاب مسجلين مرتبطين به.');
+        }
+        try {
+            $course->delete();
+            return redirect()->route('admin.courses.index')
+                             ->with('success', 'تم حذف المقرر بنجاح.');
+        } catch (\Illuminate\Database\QueryException $e) {
+            return redirect()->route('admin.courses.index')
+                             ->with('error', 'حدث خطأ أثناء الحذف: ' . $e->getMessage());
+        }
+    }
+
+    // --- Additional methods for managing resources ---
+
+    public function addResource(Request $request, Course $course)
+    {
+        $validated = $request->validate([
+            'title_ar' => 'required|string|max:255',
+            'title_en' => 'nullable|string|max:255',
+            'url' => 'required|string|max:512',
+            'type' => 'required|string|max:50',
+            'description' => 'nullable|string',
+            'semester_relevance' => 'nullable|string|max:50',
+        ]);
+
+        $validated['uploaded_by_admin_id'] = Auth::guard('admin_web')->id();
+
+        $course->resources()->create($validated);
+
+        return redirect()->route('admin.courses.show', $course)
+                         ->with('success', 'تمت إضافة المورد بنجاح.');
+    }
+
+    public function removeResource(Course $course, CourseResource $resource)
+    {
+        $resource->delete();
+        return redirect()->route('admin.courses.show', $course)
+                         ->with('success', 'تم حذف المورد بنجاح.');
+    }
+
+    // --- تم حذف دوال assignInstructor و removeAssignment ---
+}
+```
+
+---
+
+**2. تعديل `resources/views/admin/courses/show.blade.php`:**
+
+```html
+@extends('admin.layouts.app')
+
+@section('title', 'تفاصيل المقرر: ' . $course->name_ar)
+
+@push('scripts')
+<script>
+    function confirmResourceDeletion(formId) {
+        if (confirm('هل أنت متأكد من رغبتك في حذف هذا المورد؟')) {
+            document.getElementById(formId).submit();
+        }
+    }
+</script>
+@endpush
+
+@section('content')
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1><i class="fas fa-book-reader me-2"></i>تفاصيل المقرر: {{ $course->name_ar }} ({{ $course->code }})</h1>
+        <div>
+            <a href="{{ route('admin.courses.edit', $course) }}" class="btn btn-primary"><i class="fas fa-edit me-1"></i> تعديل المقرر</a>
+            <a href="{{ route('admin.courses.index') }}" class="btn btn-secondary">العودة إلى القائمة</a>
+        </div>
+    </div>
+
+    {{-- معلومات المقرر الأساسية --}}
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">معلومات المقرر</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>الاسم (عربي):</strong> {{ $course->name_ar }}</p>
+                    <p><strong>الاسم (إنجليزي):</strong> {{ $course->name_en ?: '-' }}</p>
+                    <p><strong>رمز المقرر:</strong> {{ $course->code }}</p>
+                    <p><strong>الاختصاص:</strong> <a href="{{ route('admin.specializations.show', $course->specialization) }}">{{ $course->specialization->name_ar ?? 'غير محدد' }}</a></p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>معلومات الفصل:</strong> {{ $course->semester_display_info }}</p>
+                    <p><strong>مستوى السنة:</strong> {{ $course->year_level ?: '-' }}</p>
+                    <p><strong>الساعات المعتمدة:</strong> {{ $course->credits ?: '-' }}</p>
+                    <p><strong>متاح للتسجيل:</strong> {{ $course->is_enrollable ? 'نعم' : 'لا' }} @if($course->enrollment_capacity) (السعة: {{ $course->enrollment_capacity }}) @endif</p>
+                </div>
+            </div>
+            @if($course->description_ar)
+            <hr>
+            <h6>الوصف (عربي):</h6>
+            <p>{!! nl2br(e($course->description_ar)) !!}</p>
+            @endif
+            @if($course->description_en)
+            <hr>
+            <h6>الوصف (إنجليزي):</h6>
+            <p>{!! nl2br(e($course->description_en)) !!}</p>
+            @endif
+            <hr>
+            <small class="text-muted">
+                تم إنشاؤه بواسطة: {{ $course->createdByAdmin->name_ar ?? 'غير معروف' }} في {{ $course->created_at->translatedFormat('Y-m-d') }} <br>
+                آخر تحديث بواسطة: {{ $course->lastUpdatedByAdmin->name_ar ?? 'غير معروف' }} في {{ $course->updated_at->translatedFormat('Y-m-d') }}
+            </small>
+        </div>
+    </div>
+
+    {{-- إدارة موارد المقرر --}}
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-folder-open me-2"></i>موارد المقرر ({{ $course->resources->count() }})</h5>
+        </div>
+        <div class="card-body">
+            @if($course->resources->isEmpty())
+                <p class="text-muted">لا توجد موارد مضافة لهذا المقرر حالياً.</p>
+            @else
+                <ul class="list-group list-group-flush">
+                    @foreach($course->resources as $resource)
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <a href="{{ $resource->url }}" target="_blank">{{ $resource->title_ar }}</a> ({{ $resource->type }})
+                            <small class="d-block text-muted">{{ $resource->description ?: '' }} - مضاف في: {{ $resource->semester_relevance ?: 'غير محدد' }}</small>
+                        </div>
+                        <form id="delete-resource-{{$resource->id}}" action="{{ route('admin.courses.resources.remove', [$course, $resource]) }}" method="POST" class="d-inline">
+                            @csrf
+                            @method('DELETE')
+                            <button type="button" onclick="confirmResourceDeletion('delete-resource-{{$resource->id}}')" class="btn btn-sm btn-outline-danger" title="حذف المورد"><i class="fas fa-trash"></i></button>
+                        </form>
+                    </li>
+                    @endforeach
+                </ul>
+            @endif
+            <hr>
+            <h6>إضافة مورد جديد:</h6>
+            <form action="{{ route('admin.courses.resources.add', $course) }}" method="POST">
+                @csrf
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <input type="text" name="title_ar" class="form-control form-control-sm @error('title_ar', 'addResourceForm') is-invalid @enderror" placeholder="العنوان (عربي) *" value="{{ old('title_ar') }}" required>
+                        @error('title_ar', 'addResourceForm') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+                    <div class="col-md-6">
+                        <input type="text" name="title_en" class="form-control form-control-sm @error('title_en', 'addResourceForm') is-invalid @enderror" placeholder="العنوان (إنجليزي)" value="{{ old('title_en') }}">
+                        @error('title_en', 'addResourceForm') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+                    <div class="col-md-12">
+                        <input type="url" name="url" class="form-control form-control-sm @error('url', 'addResourceForm') is-invalid @enderror" placeholder="رابط المورد *" value="{{ old('url') }}" required>
+                         @error('url', 'addResourceForm') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+                     <div class="col-md-4">
+                        <input type="text" name="type" class="form-control form-control-sm @error('type', 'addResourceForm') is-invalid @enderror" placeholder="نوع المورد (lecture_pdf) *" value="{{ old('type') }}" required>
+                        @error('type', 'addResourceForm') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+                    <div class="col-md-4">
+                        <input type="text" name="semester_relevance" class="form-control form-control-sm" placeholder="الفصل الدراسي للمورد" value="{{ old('semester_relevance') }}">
+                    </div>
+                    <div class="col-md-12">
+                        <textarea name="description" class="form-control form-control-sm" placeholder="وصف قصير (اختياري)" rows="2">{{ old('description') }}</textarea>
+                    </div>
+                    <div class="col-md-4">
+                         <button type="submit" class="btn btn-sm btn-success"><i class="fas fa-plus me-1"></i> إضافة المورد</button>
+                    </div>
+                </div>
+            </form>
+             @if ($errors->hasBag('addResourceForm')) {{-- تم تغيير الشرط ليتوافق مع Laravel --}}
+                <div class="alert alert-danger mt-3">
+                    <h6>أخطاء في نموذج إضافة المورد:</h6>
+                    <ul>
+                        @foreach ($errors->getBag('addResourceForm')->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+        </div>
+    </div>
+
+    {{-- تم حذف قسم إدارة تعيين المدرسين بالكامل --}}
+
+    {{-- يمكنك إضافة قسم لعرض الطلاب المسجلين في المقرر هنا إذا أردت --}}
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-users me-2"></i>الطلاب المسجلون في المقرر ({{ $course->enrolledStudents->count() }})</h5>
+        </div>
+        <div class="card-body">
+            @if($course->enrolledStudents->isEmpty())
+                <p class="text-muted">لا يوجد طلاب مسجلون في هذا المقرر حالياً.</p>
+            @else
+                <ul class="list-group list-group-flush">
+                    @foreach($course->enrolledStudents as $studentEnrollment)
+                        <li class="list-group-item">
+                            <a href="{{ route('admin.students.show', $studentEnrollment->student) }}">{{ $studentEnrollment->student->full_name_ar ?? 'طالب غير معروف' }}</a>
+                            - الحالة: {{ $studentEnrollment->status }}
+                            @if($studentEnrollment->grade) - الدرجة: {{ $studentEnrollment->grade }} @endif
+                            (مسجل في: {{ $studentEnrollment->semester_enrolled }})
+                        </li>
+                    @endforeach
+                </ul>
+            @endif
+        </div>
+    </div>
+
+</div>
+@endsection
+```
+
+---
+
+**3. تعديل `routes/web.php`:**
+
+سنقوم بإزالة المسارات الخاصة بتعيين المدرسين.
+
+```php
+<?php
+
+use Illuminate\Support\Facades\Route;
+
+// Admin Auth Controllers
+use App\Http\Controllers\Admin\Auth\LoginController as AdminLoginController;
+
+// Admin Panel Controllers
+use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
+use App\Http\Controllers\Admin\FacultyController as AdminFacultyController;
+use App\Http\Controllers\Admin\SpecializationController as AdminSpecializationController;
+use App\Http\Controllers\Admin\InstructorController as AdminInstructorController;
+use App\Http\Controllers\Admin\CourseController as AdminCourseController; // تم استيراده بالفعل
+use App\Http\Controllers\Admin\ProjectController as AdminProjectController;
+use App\Http\Controllers\Admin\UniversityFacilityController as AdminUniversityFacilityController;
+use App\Http\Controllers\Admin\EventController as AdminEventController;
+use App\Http\Controllers\Admin\StudentController as AdminStudentController;
+use App\Http\Controllers\Admin\EventRegistrationController as AdminEventRegistrationController;
+use App\Http\Controllers\Admin\NotificationController as AdminNotificationController;
+use App\Http\Controllers\Admin\AdminUserController as AdminAdminUserController;
+
+/* ... (بقية الكود كما هو) ... */
+
+// Admin Panel Routes (Protected by admin_web guard)
+Route::prefix('admin')->name('admin.')->middleware('auth:admin_web')->group(function () {
+    Route::get('dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
+
+    Route::resource('faculties', AdminFacultyController::class);
+    Route::resource('specializations', AdminSpecializationController::class);
+    Route::resource('instructors', AdminInstructorController::class);
+
+    // Course Routes (مع مسارات الموارد)
+    Route::resource('courses', AdminCourseController::class);
+    Route::post('courses/{course}/resources', [AdminCourseController::class, 'addResource'])->name('courses.resources.add');
+    Route::delete('courses/{course}/resources/{resource}', [AdminCourseController::class, 'removeResource'])->name('courses.resources.remove');
+    // تم حذف مسارات assignments من هنا
+
+    Route::resource('projects', AdminProjectController::class);
+    Route::resource('university-facilities', AdminUniversityFacilityController::class);
+    Route::resource('events', AdminEventController::class);
+    Route::resource('students', AdminStudentController::class);
+    Route::resource('admin-users', AdminAdminUserController::class)->except(['show']);
+
+    Route::prefix('event-registrations')->name('event-registrations.')->group(function () {
+        Route::get('/', [AdminEventRegistrationController::class, 'index'])->name('index');
+        Route::post('{registration}/approve', [AdminEventRegistrationController::class, 'approve'])->name('approve');
+        Route::post('{registration}/reject', [AdminEventRegistrationController::class, 'reject'])->name('reject');
+        Route::get('{registration}', [AdminEventRegistrationController::class, 'show'])->name('show');
+    });
+
+    Route::prefix('notifications')->name('notifications.')->group(function () {
+        Route::get('/', [AdminNotificationController::class, 'index'])->name('index');
+        Route::get('/create', [AdminNotificationController::class, 'create'])->name('create');
+        Route::post('/', [AdminNotificationController::class, 'store'])->name('store');
+        Route::get('/{notification}', [AdminNotificationController::class, 'show'])->name('show');
+    });
+});
+
+/* ... (بقية الكود كما هو) ... */
+```
+
+**شرح التعديلات:**
+
+*   **`CourseController`:**
+    *   تمت إزالة أي إشارة لتحميل أو استخدام علاقة `instructors` من دالة `show()`.
+    *   تمت إزالة متغير `$availableInstructors` من دالة `show()`.
+    *   تمت إزالة التحقق من `instructors()->exists()` من دالة `destroy()`.
+    *   تم حذف دالتي `assignInstructor` و `removeAssignment` بالكامل.
+*   **`show.blade.php` (للمقررات):**
+    *   تم حذف قسم "المدرسون المعينون للمقرر" بالكامل، بما في ذلك قائمة المدرسين ونموذج تعيين مدرس جديد.
+    *   تم إضافة قسم بسيط لعرض الطلاب المسجلين في المقرر، بافتراض أن لديك علاقة `enrolledStudents` في نموذج `Course` (كما هو الحال في تصميماتنا السابقة).
+    *   في قسم إضافة الموارد، تم تعديل طريقة عرض أخطاء التحقق لتستخدم `hasBag('addResourceForm')` و `getBag('addResourceForm')` إذا كنت ستستخدم "Named Error Bags" لتفريق أخطاء هذا النموذج عن أخطاء نموذج آخر في نفس الصفحة (على الرغم من أنه في هذا التصميم، لا يوجد نموذج آخر قد يسبب تضاربًا مباشرًا في الأخطاء).
+
+بهذه التعديلات، تكون قد أزلت بشكل كامل أي محاولة للتعامل مع ربط المدرسين بالمقررات من خلال واجهة إدارة المقررات هذه. إذا كنت ستقوم بربط المدرسين بالمقررات من خلال واجهة أخرى (مثلاً من خلال صفحة تفاصيل المدرس، أو واجهة مخصصة لتعيينات المقررات)، فستحتاج إلى بناء تلك الواجهات والمتحكمات بشكل منفصل.
+
+
+---
+
+الخطأ `Missing required parameter for [Route: admin.students.show] [URI: admin/students/{student}] [Missing parameter: student].` يعني أنك تحاول إنشاء رابط لمسار يتوقع بارامتر اسمه `student`، ولكن القيمة التي تمررها لهذا البارامتر هي `null` أو غير موجودة.
+
+يحدث هذا في السطر التالي ضمن ملف `resources/views/admin/courses/show.blade.php`:
+
+```html
+<a href="{{ route('admin.students.show', $studentEnrollment->student) }}">{{ $studentEnrollment->student->full_name_ar ?? 'طالب غير معروف' }}</a>
+```
+
+السبب المحتمل هو أن `$studentEnrollment->student` تُرجع `null` في بعض الحالات. هذا يمكن أن يحدث إذا:
+
+1.  **العلاقة `student` في نموذج `StudentCourseEnrollment` غير مُعرفة بشكل صحيح أو أن `student_id` في جدول `student_course_enrollments` هو `null` لبعض السجلات (وهو أمر غير مرجح إذا كان مفتاحًا أجنبيًا `not null`).**
+2.  **تم حذف الطالب المرتبط بتسجيل المقرر هذا من قاعدة البيانات، ولكن سجل التسجيل (`student_course_enrollment`) لا يزال موجودًا.** هذا هو السيناريو الأكثر شيوعًا لمثل هذه المشكلة إذا كانت المفاتيح الأجنبية لا تستخدم `onDelete('cascade')` أو إذا تم الحذف بطريقة تجاوزت قيود المفتاح الأجنبي.
+
+**الحل:**
+
+يجب عليك التحقق من وجود `$studentEnrollment->student` قبل محاولة استخدامه في `route()` أو الوصول إلى خصائصه.
+
+**تعديل `resources/views/admin/courses/show.blade.php`:**
+
+```html
+@extends('admin.layouts.app')
+
+@section('title', 'تفاصيل المقرر: ' . $course->name_ar)
+
+@push('scripts')
+<script>
+    function confirmResourceDeletion(formId) {
+        if (confirm('هل أنت متأكد من رغبتك في حذف هذا المورد؟')) {
+            document.getElementById(formId).submit();
+        }
+    }
+</script>
+@endpush
+
+@section('content')
+<div class="container-fluid">
+    {{-- ... (بقية الكود الخاص بمعلومات المقرر وموارده كما هو) ... --}}
+
+    {{-- قسم الطلاب المسجلين --}}
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-users me-2"></i>الطلاب المسجلون في المقرر ({{ $course->enrolledStudents->count() }})</h5>
+        </div>
+        <div class="card-body">
+            @if($course->enrolledStudents->isEmpty())
+                <p class="text-muted">لا يوجد طلاب مسجلون في هذا المقرر حالياً.</p>
+            @else
+                <ul class="list-group list-group-flush">
+                    @foreach($course->enrolledStudents as $studentEnrollment)
+                        <li class="list-group-item">
+                            @if ($studentEnrollment->student) {{-- <<< التحقق هنا --}}
+                                <a href="{{ route('admin.students.show', $studentEnrollment->student) }}">{{ $studentEnrollment->student->full_name_ar ?? 'طالب غير معروف' }}</a>
+                                - الحالة: {{ $studentEnrollment->status }}
+                                @if($studentEnrollment->grade) - الدرجة: {{ $studentEnrollment->grade }} @endif
+                                (مسجل في: {{ $studentEnrollment->semester_enrolled }})
+                            @else
+                                <span class="text-danger">طالب محذوف (ID: {{ $studentEnrollment->student_id }})</span>
+                                - الحالة: {{ $studentEnrollment->status }}
+                                @if($studentEnrollment->grade) - الدرجة: {{ $studentEnrollment->grade }} @endif
+                                (مسجل في: {{ $studentEnrollment->semester_enrolled }})
+                            @endif
+                        </li>
+                    @endforeach
+                </ul>
+            @endif
+        </div>
+    </div>
+
+</div>
+@endsection
+```
+
+**شرح التعديل:**
+
+تمت إضافة شرط `@if ($studentEnrollment->student)` قبل محاولة إنشاء الرابط أو الوصول إلى خصائص الطالب.
+
+*   إذا كان `$studentEnrollment->student` موجودًا (أي أن الطالب المرتبط بالتسجيل لا يزال في قاعدة البيانات وتم تحميل العلاقة بنجاح)، فسيتم عرض الرابط واسم الطالب كالمعتاد.
+*   إذا كان `$studentEnrollment->student` هو `null` (مما يعني أن الطالب قد تم حذفه أو أن العلاقة فشلت لسبب ما)، فسيتم عرض رسالة بديلة تشير إلى أن الطالب محذوف مع عرض `student_id` الخاص به إذا أردت ذلك للمساعدة في تتبع المشكلة في قاعدة البيانات.
+
+**مراجعة نموذج `StudentCourseEnrollment`:**
+
+تأكد من أن علاقة `student` في نموذج `App\Models\StudentCourseEnrollment.php` مُعرفة بشكل صحيح:
+
+```php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class StudentCourseEnrollment extends Model
+{
+    use HasFactory;
+
+    protected $table = 'student_course_enrollments';
+
+    protected $fillable = [
+        'student_id',
+        'course_id',
+        'enrollment_date',
+        'semester_enrolled',
+        'status',
+        'grade',
+        'completion_date',
+        'notes',
+    ];
+
+    protected $casts = [
+        'enrollment_date' => 'datetime',
+        'completion_date' => 'date',
+    ];
+
+    public function student(): BelongsTo
+    {
+        return $this->belongsTo(Student::class, 'student_id'); // تأكد من أن المفتاح الأجنبي صحيح
+    }
+
+    public function course(): BelongsTo
+    {
+        return $this->belongsTo(Course::class, 'course_id'); // تأكد من أن المفتاح الأجنبي صحيح
+    }
+}
+```
+
+**مراجعة تحميل العلاقات في `CourseController`:**
+
+في دالة `show` بمتحكم `CourseController`، أنت تقوم بتحميل علاقة `enrolledStudents`. تأكد من أن هذه العلاقة مُعرفة بشكل صحيح في نموذج `Course.php` وأنها تقوم بتحميل علاقة `student` داخلها إذا كنت ستصل إليها مباشرة في الـ view.
+
+في `App\Models\Course.php`:
+
+```php
+// ...
+public function enrolledStudents() // الطلاب المسجلون في هذا المقرر
+{
+    // هذه العلاقة ترجع كائنات StudentCourseEnrollment
+    // لذا في الـ view، $studentEnrollment->student ستعمل
+    return $this->hasMany(StudentCourseEnrollment::class);
+
+    // إذا كنت تريد إرجاع كائنات Student مباشرة عبر علاقة many-to-many:
+    // return $this->belongsToMany(Student::class, 'student_course_enrollments', 'course_id', 'student_id')
+    //                 ->withPivot('enrollment_date', 'semester_enrolled', 'status', 'grade', 'completion_date', 'notes')
+    //                 ->withTimestamps();
+}
+// ...
+```
+
+إذا كانت علاقة `enrolledStudents` في نموذج `Course` هي `hasMany(StudentCourseEnrollment::class)` (كما هو الحال في تصميمنا الأخير)، فإن الكود في الـ view `$studentEnrollment->student` يجب أن يعمل بشكل صحيح طالما أن علاقة `student()` في `StudentCourseEnrollment` مُعرفة.
+
+التعديل الأساسي بإضافة `@if ($studentEnrollment->student)` يجب أن يحل مشكلة الخطأ المباشر ويمنع التطبيق من الانهيار عند وجود بيانات غير متناسقة (طالب محذوف مع بقاء سجل تسجيله).
 
 
 ---
