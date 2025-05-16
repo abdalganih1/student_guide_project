@@ -64,7 +64,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth:admin_web')->group(func
     Route::resource('university-facilities', AdminUniversityFacilityController::class); // لإدارة الوسائط (الصور والفيديو)
     Route::resource('events', AdminEventController::class);
     Route::resource('students', AdminStudentController::class); // لإدارة بيانات الطلاب
-    Route::resource('admin-users', AdminAdminUserController::class)->except(['show']); // لإدارة مستخدمي لوحة التحكم (إذا لزم الأمر)
+    Route::resource('admin-users', AdminAdminUserController::class); // لإدارة مستخدمي لوحة التحكم (إذا لزم الأمر)
 
     // Event Registrations Management
     Route::prefix('event-registrations')->name('event-registrations.')->group(function () {
