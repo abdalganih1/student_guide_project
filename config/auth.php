@@ -38,8 +38,12 @@ return [
     'guards' => [
         'web' => [
             'driver' => 'session',
-            'provider' => 'users',
+            'provider' => 'admins',
         ],
+        'admin_web' => [
+        'driver' => 'session',
+        'provider' => 'admins', // سنعرف هذا الـ provider
+    ],
     ],
 
     /*
@@ -64,6 +68,10 @@ return [
             'driver' => 'eloquent',
             'model' => App\Models\Student::class,
         ],
+        'admins' => [
+        'driver' => 'eloquent',
+        'model' => App\Models\AdminUser::class,
+    ],
 
         // 'users' => [
         //     'driver' => 'database',
@@ -97,6 +105,12 @@ return [
             'expire' => 60,
             'throttle' => 60,
         ],
+        'admins' => [ // إذا أردت ميزة إعادة تعيين كلمة المرور للمديرين
+        'provider' => 'admins',
+        'table' => 'admin_password_reset_tokens', // ستحتاج لإنشاء جدول هجرة لهذا
+        'expire' => 60,
+        'throttle' => 60,
+    ],
     ],
 
     /*

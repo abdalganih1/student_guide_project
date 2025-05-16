@@ -23,11 +23,6 @@ class FacultySeeder extends Seeder
             'description_ar' => 'كلية متخصصة في علوم الإدارة والأعمال.',
             'description_en' => 'A faculty specialized in management and business sciences.',
         ]);
-        Faculty::create([
-            'name_ar' => 'كلية إدارة الأعمال',
-            'name_en' => 'Faculty of Business Administration',
-            'description_ar' => 'كلية متخصصة في علوم الإدارة والأعمال.',
-            'description_en' => 'A faculty specialized in management and business sciences.',
-        ]);
+        
     }
 }

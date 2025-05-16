@@ -6962,3 +6962,1381 @@ class EventRegistrationApprovedMail extends Mailable implements ShouldQueue
 
 هذه مجموعة كبيرة من الملفات والأكواد. تذكر أن هذا هو هيكل أساسي، وستحتاج إلى تخصيصه وتوسيعه ليناسب تمامًا تصميمك ومتطلباتك الدقيقة. ابدأ بتنفيذ الأجزاء الأساسية ثم قم ببناء الميزات تدريجيًا.
 
+
+
+
+
+---
+هذا الخطأ `Attempt to read property "role" on null` يعني أنك تحاول الوصول إلى خاصية `role` على كائن قيمته `null`. في سياق صفحة تسجيل دخول المدير (`/admin/login`)، يحدث هذا غالبًا في أحد المكانين:
+
+1.  **في ملف `_sidebar.blade.php` أو `_navbar.blade.php` (أو أي `partial` يتم تضمينه في `app.blade.php`):**
+    إذا كنت تحاول الوصول إلى `Auth::guard('admin_web')->user()->role` في هذه الملفات لعرض عناصر القائمة بناءً على دور المدير، ولكن المستخدم لم يسجل دخوله بعد (وهو الحال في صفحة تسجيل الدخول)، فإن `Auth::guard('admin_web')->user()` سيكون `null`.
+
+2.  **في `middleware` `AdminUserController` (كما في الكود الذي قدمته سابقًا):**
+    ```php
+    $this->middleware(function ($request, $next) {
+        // الخطأ يحدث هنا إذا لم يكن المستخدم مسجلاً دخوله
+        if (Auth::guard('admin_web')->user()->role !== 'superadmin') {
+            return redirect()->route('admin.dashboard')->with('error', 'ليس لديك الصلاحية للوصول لهذه الصفحة.');
+        }
+        return $next($request);
+    })->except(['index']);
+    ```
+    إذا كان هذا الـ `middleware` يتم تطبيقه على مسار صفحة تسجيل الدخول بطريقة ما (وهو أمر غير مرجح للمسار نفسه، ولكن قد يكون بسبب خطأ في تعريف المسارات أو تطبيق الـ `middleware` بشكل عام)، فسيحدث الخطأ.
+
+**الحل الأرجح والأكثر شيوعًا هو المشكلة الأولى (في الـ Views).**
+
+**كيفية حل المشكلة في الـ Views:**
+
+يجب عليك دائمًا التحقق مما إذا كان المستخدم قد سجل دخوله قبل محاولة الوصول إلى خصائصه.
+
+**مثال للتعديل في `resources/views/admin/partials/_sidebar.blade.php`:**
+
+إذا كان لديك كود مشابه لهذا:
+
+```html
+{{-- ... other items ... --}}
+@if(Auth::guard('admin_web')->user()->role === 'superadmin') {{-- هذا السطر قد يسبب المشكلة --}}
+<li class="nav-item">
+    <a class="nav-link {{ request()->routeIs('admin.admin-users.*') ? 'active' : '' }}" href="{{ route('admin.admin-users.index') }}">
+        <i class="fas fa-users-cog me-2"></i>إدارة مديري النظام
+    </a>
+</li>
+@endif
+{{-- ... other items ... --}}
+```
+
+قم بتعديله ليصبح:
+
+```html
+{{-- ... other items ... --}}
+@auth('admin_web') {{-- تحقق أولاً أن المدير مسجل دخوله --}}
+    @if(Auth::guard('admin_web')->user()->role === 'superadmin')
+    <li class="nav-item">
+        <a class="nav-link {{ request()->routeIs('admin.admin-users.*') ? 'active' : '' }}" href="{{ route('admin.admin-users.index') }}">
+            <i class="fas fa-users-cog me-2"></i>إدارة مديري النظام
+        </a>
+    </li>
+    @endif
+
+    {{-- يمكنك وضع أي عناصر أخرى تعتمد على تسجيل الدخول هنا --}}
+    <li class="nav-item mt-auto">
+         <form method="POST" action="{{ route('admin.logout') }}">
+            @csrf
+            <button type="submit" class="nav-link text-danger">
+                <i class="fas fa-sign-out-alt me-2"></i>تسجيل الخروج
+            </button>
+        </form>
+    </li>
+@endauth
+{{-- ... other items ... --}}
+```
+
+**وبالمثل في `resources/views/admin/partials/_navbar.blade.php`:**
+
+إذا كان لديك:
+
+```html
+<span class="navbar-text">
+    مرحباً، {{ Auth::guard('admin_web')->user()->name_ar ?: Auth::guard('admin_web')->user()->username }}
+</span>
+```
+
+عدّله إلى:
+
+```html
+@auth('admin_web')
+<span class="navbar-text">
+    مرحباً، {{ Auth::guard('admin_web')->user()->name_ar ?: Auth::guard('admin_web')->user()->username }}
+</span>
+@endauth
+```
+
+**كيفية حل المشكلة في `middleware` (إذا كانت هي السبب):**
+
+إذا كان الخطأ يأتي من الـ `middleware` في `AdminUserController` (وهو أقل احتمالاً لصفحة تسجيل الدخول نفسها إلا إذا كان هناك خطأ في تطبيق الـ `middleware` على المسار):
+
+1.  **تأكد من أن الـ `middleware` لا يتم تطبيقه على مسارات المصادقة (login, register, etc.).** يجب أن يكون الـ `middleware` الذي يتحقق من الدور مطبقًا فقط على المسارات التي تتطلب مديرًا مسجلاً بدوره المناسب.
+    في `AdminUserController`، الـ `middleware` الذي يتحقق من دور `superadmin` تم تطبيقه على جميع الدوال ما عدا `index`. إذا كانت دالة `index` لا تتطلب دور `superadmin`، فهذا جيد. أما إذا كانت صفحة `admin.login.form` يتم توجيهها بطريقة ما عبر هذا المتحكم قبل المصادقة، فهذا خطأ.
+
+    مسارات المصادقة عادة ما تكون محمية بـ `guest:admin_web` middleware كما في `AdminLoginController`:
+    ```php
+    public function __construct()
+    {
+        $this->middleware('guest:admin_web')->except('logout');
+    }
+    ```
+    وهذا يمنع المستخدم المسجل من الوصول لصفحة تسجيل الدخول.
+
+2.  **إذا كان يجب تطبيق الـ `middleware` ولكنه قد يعمل قبل المصادقة:**
+    يمكنك تعديل الـ `middleware` في `AdminUserController` ليتحقق أولاً من وجود مستخدم مسجل:
+    ```php
+    $this->middleware(function ($request, $next) {
+        $adminUser = Auth::guard('admin_web')->user(); // احصل على المستخدم
+        // تحقق من وجود المستخدم ثم تحقق من الدور
+        if (!$adminUser || $adminUser->role !== 'superadmin') {
+            // إذا لم يكن المستخدم مسجلاً، سيقوم middleware 'auth:admin_web' بمعالجة ذلك
+            // إذا كان مسجلاً ولكن ليس superadmin:
+            if ($adminUser) { // فقط إذا كان مسجلاً وليس superadmin
+                 return redirect()->route('admin.dashboard')->with('error', 'ليس لديك الصلاحية للوصول لهذه الصفحة.');
+            }
+        }
+        return $next($request);
+    })->except(['index']); // أو طبقها فقط على الدوال التي تحتاجها
+    ```
+    ولكن، الطريقة الأفضل هي التأكد من أن middleware `auth:admin_web` يتم تطبيقه *قبل* هذا الـ middleware المخصص للتحقق من الدور.
+
+**الخطوات لتحديد مصدر المشكلة بدقة:**
+
+1.  **راجع الـ `Stack Trace` الكامل للخطأ.** سيوضح لك الملف والسطر الذي يحدث فيه الخطأ بالضبط. هذا أهم دليل.
+2.  **ابدأ بالـ Views:** تحقق من `_sidebar.blade.php`, `_navbar.blade.php`, وأي `partials` أخرى يتم تضمينها في `layouts/app.blade.php`. ابحث عن أي استخدام لـ `Auth::guard('admin_web')->user()->role` أو أي خاصية أخرى للمستخدم بدون استخدام `@auth('admin_web')` directive أولاً.
+3.  **راجع المسارات (`routes/web.php`):** تأكد من أن مسار `/admin/login` لا يمر عبر أي `middleware` يتوقع وجود مستخدم مسجل (باستثناء `guest:admin_web`).
+4.  **راجع الـ `middleware` المطبق:** إذا كان الخطأ من `middleware`، فإن الـ `Stack Trace` سيشير إليه.
+
+غالبًا ما يكون السبب هو محاولة الوصول لبيانات المستخدم في الـ `view` قبل تسجيل الدخول. قم بتطبيق التعديلات المقترحة على الـ `views` أولاً.
+
+---
+صحيح، هذا الخطأ `View [admin.partials._messages] not found.` يعني أن Laravel يحاول تضمين ملف `_messages.blade.php` من المسار `resources/views/admin/partials/` ولكنه لا يستطيع العثور عليه.
+
+لقد أشرت إلى هذا الملف في القالب الرئيسي `app.blade.php` لعرض رسائل النجاح والخطأ، ولكننا لم نقم بإنشائه فعليًا في الخطوات السابقة.
+
+**الحل: إنشاء ملف `_messages.blade.php`**
+
+1.  **أنشئ الملف:**
+    في الطرفية، أو يدويًا، أنشئ الملف التالي:
+    ```bash
+    touch resources/views/admin/partials/_messages.blade.php
+    ```
+    أو أنشئه عبر محرر الأكواد الخاص بك في المسار `resources/views/admin/partials/_messages.blade.php`.
+
+2.  **أضف محتوى بسيط للملف:**
+    هذا الملف سيتحقق من وجود رسائل في الـ `session` (التي يتم إرسالها عادةً مع `->with('success', '...')` أو `->with('error', '...')` بعد عملية `redirect()`) ويعرضها.
+
+    **`resources/views/admin/partials/_messages.blade.php`**
+
+    ```html
+    @if (session('success'))
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            {{ session('success') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    @endif
+
+    @if (session('error'))
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            {{ session('error') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    @endif
+
+    @if (session('warning'))
+        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+            {{ session('warning') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    @endif
+
+    @if (session('info'))
+        <div class="alert alert-info alert-dismissible fade show" role="alert">
+            {{ session('info') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    @endif
+
+    {{-- لعرض أخطاء التحقق من صحة النموذج (Validation Errors) --}}
+    @if ($errors->any())
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <h5 class="alert-heading">حدث خطأ!</h5>
+            <ul class="mb-0">
+                @foreach ($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    @endif
+    ```
+
+**شرح محتوى `_messages.blade.php`:**
+
+*   **`@if (session('success'))`**: يتحقق مما إذا كانت هناك رسالة باسم `success` مخزنة في الـ `session`. إذا كانت موجودة، يعرضها داخل `div` بتنسيق `alert-success` من Bootstrap.
+*   **`{{ session('success') }}`**: يعرض قيمة الرسالة.
+*   **`btn-close`**: زر لإغلاق التنبيه (يعتمد على JavaScript الخاص بـ Bootstrap).
+*   تم تكرار نفس النمط لرسائل `error`, `warning`, و `info`.
+*   **`@if ($errors->any())`**: يتحقق مما إذا كان هناك أي أخطاء تحقق من صحة النموذج (Validation Errors) مرسلة من المتحكم (عادةً تلقائيًا عند فشل التحقق من صحة `FormRequest`).
+*   **`@foreach ($errors->all() as $error)`**: يمر على جميع أخطاء التحقق ويعرضها كقائمة.
+
+بعد إنشاء هذا الملف بالمحتوى المقترح، يجب أن يختفي الخطأ `View [admin.partials._messages] not found.` عند تحديث الصفحة.
+
+---
+الخطأ `This password does not use the Bcrypt algorithm.` عند محاولة تسجيل الدخول باستخدام `Auth::attempt()` يعني أن كلمة المرور المخزنة في قاعدة البيانات لـ `AdminUser` الذي تحاول تسجيل الدخول به **ليست مشفرة باستخدام Bcrypt**، وهو الخوارزمية الافتراضية التي يستخدمها Laravel لتشفير والتحقق من كلمات المرور.
+
+**الأسباب المحتملة والحلول:**
+
+1.  **كلمة المرور في قاعدة البيانات هي نص عادي (Plain Text) أو مشفرة بخوارزمية مختلفة:**
+    *   **السبب:** ربما قمت بإدخال بيانات المدير (خاصة كلمة المرور) مباشرة في قاعدة البيانات كنص عادي، أو تم إنشاؤها عبر Seeder بدون تشفير Bcrypt صحيح.
+    *   **الحل:**
+        *   **إذا كان لديك عدد قليل من المستخدمين المديرين:** يمكنك تحديث كلمات المرور يدويًا في قاعدة البيانات إلى نسخة مشفرة بـ Bcrypt. يمكنك استخدام `php artisan tinker` لإنشاء هاش لكلمة مرور:
+            ```bash
+            php artisan tinker
+            ```
+            ثم داخل Tinker:
+            ```php
+            echo \Illuminate\Support\Facades\Hash::make('كلمةالمرورالجديدة');
+            exit;
+            ```
+            انسخ الهاش الناتج والصقه في عمود `password_hash` للمستخدم المعني في قاعدة البيانات.
+        *   **إذا كنت تستخدم Seeder:** تأكد أن الـ Seeder الخاص بـ `AdminUserSeeder` يستخدم `Hash::make()` لتشفير كلمة المرور، كما في المثال الذي قدمته سابقًا:
+            ```php
+            // AdminUserSeeder.php
+            use Illuminate\Support\Facades\Hash; // تأكد من وجود هذا
+
+            AdminUser::create([
+                // ...
+                'password_hash' => Hash::make('password123'), // مهم!
+                // ...
+            ]);
+            ```
+            بعد تعديل الـ Seeder، قم بتنفيذه مرة أخرى (قد تحتاج إلى `php artisan migrate:fresh --seed` إذا كنت تريد إعادة تهيئة كل شيء).
+
+2.  **النموذج `AdminUser` لا يقوم بتشفير كلمة المرور عند التعيين (إذا لم تستخدم `password_hash => 'hashed'` في `$casts`):**
+    *   **السبب:** إذا لم يكن لديك `mutator` (مثل `setPasswordHashAttribute`) في نموذج `AdminUser` أو لم تستخدم خاصية `$casts` مع `'password_hash' => 'hashed'` (في Laravel 9+)، فإن أي محاولة لتعيين `password_hash` مباشرة (مثلاً عبر `AdminUser::create(['password_hash' => 'plain_password'])`) ستقوم بتخزين النص العادي.
+    *   **الحل:**
+        *   **في Laravel 9+ (الطريقة المفضلة):**
+            في نموذج `app/Models/AdminUser.php`، تأكد من وجود السطر التالي في مصفوفة `$casts`:
+            ```php
+            protected $casts = [
+                'is_active' => 'boolean',
+                'email_verified_at' => 'datetime',
+                'password_hash' => 'hashed', // هذا يقوم بالتشفير التلقائي عند التعيين
+            ];
+            ```
+            بهذه الطريقة، عندما تقوم بـ `AdminUser::create(['password_hash' => 'some_password'])` أو `$adminUser->password_hash = 'some_password'; $adminUser->save();`، سيقوم Laravel تلقائيًا بتشفيرها باستخدام Bcrypt.
+        *   **في جميع إصدارات Laravel (أو إذا كنت تفضل التحكم اليدوي):**
+            أضف `mutator` لخاصية `password_hash` في نموذج `AdminUser`:
+            ```php
+            // app/Models/AdminUser.php
+            use Illuminate\Support\Facades\Hash;
+
+            // ...
+            public function setPasswordHashAttribute($value)
+            {
+                if ($value) { // فقط إذا تم تمرير قيمة
+                    $this->attributes['password_hash'] = Hash::make($value);
+                }
+            }
+            ```
+            وعند إنشاء المستخدم أو تحديث كلمة المرور، قم بتعيين `password_hash` إلى كلمة المرور النصية:
+            ```php
+            AdminUser::create([
+                'username' => 'testadmin',
+                'name_ar' => 'مدير تجريبي',
+                'email' => 'test@example.com',
+                'password_hash' => 'newpassword123', // الـ mutator سيتولى التشفير
+                'role' => 'admin',
+            ]);
+            ```
+
+3.  **تكوين المصادقة (`config/auth.php`) لا يستخدم `eloquent` مع `bcrypt` بشكل صحيح (أقل احتمالاً إذا لم تغير الإعدادات الافتراضية):**
+    *   **السبب:** قد يكون هناك خطأ في تكوين `guards` أو `providers` في `config/auth.php`.
+    *   **الحل:** تأكد أن الـ `provider` الخاص بالمديرين (`admins`) يستخدم `driver => 'eloquent'`. Laravel يفترض تلقائيًا أن كلمات المرور المشفرة في `eloquent` هي Bcrypt.
+
+        ```php
+        // config/auth.php
+        'providers' => [
+            // ...
+            'admins' => [
+                'driver' => 'eloquent',
+                'model' => App\Models\AdminUser::class, // تأكد من أن النموذج صحيح
+            ],
+        ],
+        ```
+
+**الخطوات المقترحة لحل المشكلة:**
+
+1.  **تحقق من قاعدة البيانات أولاً:** انظر إلى قيمة عمود `password_hash` للمستخدم الذي تحاول تسجيل الدخول به. هل هي نص عادي (مثل "password123") أم سلسلة طويلة تبدأ بـ `$2y$` (وهو مؤشر على Bcrypt hash)؟
+    *   إذا كانت نصًا عاديًا، فهذا هو السبب الرئيسي. قم بتحديثها إلى هاش Bcrypt كما هو موضح في النقطة 1 أعلاه.
+
+2.  **راجع نموذج `AdminUser.php`:**
+    *   تأكد من وجود آلية لتشفير كلمة المرور عند التعيين، إما عبر `$casts = ['password_hash' => 'hashed'];` (لـ Laravel 9+) أو عبر `mutator` `setPasswordHashAttribute()`.
+    *   تأكد من أن اسم العمود في النموذج (`password_hash`) يطابق اسم العمود في قاعدة البيانات.
+
+3.  **راجع `AdminUserSeeder.php`:** تأكد أنه يستخدم `Hash::make()` لتشفير كلمات المرور.
+
+4.  **تأكد أن `LoginController` يستخدم الحقل الصحيح للمقارنة:**
+    في `Admin/Auth/LoginController.php`، عند محاولة المصادقة:
+    ```php
+    $credentials = [
+        'username' => $request->username, // أو 'email' إذا كنت تسجل الدخول بالبريد
+        'password' => $request->password, // Laravel سيقارن هذا مع 'password_hash' بعد التشفير
+    ];
+
+    if (Auth::guard('admin_web')->attempt($credentials, $request->filled('remember'))) {
+        // ...
+    }
+    ```
+    Laravel يعرف أن `password` في `$credentials` يجب أن يتم مطابقته مع العمود الذي تم تحديده كعمود كلمة المرور في النموذج (عادةً يُستنتج أنه العمود الذي يتم تشفيره، وهو `password_hash` في حالتك بسبب الـ mutator أو الـ cast).
+
+**إذا كنت تستخدم `password` كاسم للعمود في قاعدة البيانات بدلاً من `password_hash`:**
+
+إذا كان اسم عمود كلمة المرور في جدول `admin_users` هو `password` (وليس `password_hash`)، فستحتاج إلى:
+
+1.  **في نموذج `AdminUser.php`:**
+    *   غير اسم الخاصية في `$fillable`, `$hidden`, `$casts` أو الـ `mutator` إلى `password`.
+    *   إذا كنت تستخدم Laravel لـ `Authenticatable`، قد تحتاج لتحديد اسم عمود كلمة المرور إذا لم يكن `password`:
+        ```php
+        // public function getAuthPasswordName()
+        // {
+        //     return 'password_hash'; // إذا كان اسم العمود password_hash
+        // }
+        // ولكن إذا كان اسم العمود هو 'password' فليس هناك حاجة لهذا عادةً.
+        ```
+
+2.  **في `AdminLoginController`:**
+    سيظل Laravel يحاول استخدام خوارزمية Bcrypt بشكل افتراضي. المشكلة ستكون أن الهاش المخزن في العمود `password` ليس Bcrypt.
+
+**الخلاصة:**
+
+السيناريو الأكثر احتمالاً هو أن كلمة المرور المخزنة في قاعدة البيانات لـ `AdminUser` الذي تحاول تسجيل الدخول به ليست مشفرة باستخدام Bcrypt. قم بتصحيح ذلك إما يدويًا في قاعدة البيانات أو عبر تعديل/إعادة تشغيل الـ Seeder مع التأكد من استخدام `Hash::make()`. ثم تأكد أن نموذج `AdminUser` لديك مُعد بشكل صحيح لتشفير كلمات المرور الجديدة تلقائيًا.
+---
+
+لقد قدمت معلومات جيدة جدًا، ويبدو أن معظم الإعدادات صحيحة، خاصةً وأن كلمات المرور في قاعدة البيانات تبدأ بـ `$2y$` مما يعني أنها مشفرة بـ Bcrypt.
+
+ومع ذلك، هناك تعارض بسيط ولكنه مهم في نموذج `AdminUser.php` الخاص بك.
+
+**المشكلة:**
+
+في نموذج `AdminUser.php`، لديك طريقتان لتشفير كلمة المرور:
+
+1.  **عبر خاصية `$casts`:**
+    ```php
+    protected $casts = [
+        // ...
+        'password_hash' => 'hashed', // هذا كافٍ لتشفير تلقائي
+    ];
+    ```
+2.  **عبر `mutator` (دالة `set`):**
+    ```php
+    public function setPasswordHashAttribute($value)
+    {
+        $this->attributes['password_hash'] = bcrypt($value);
+    }
+    ```
+
+عندما يكون لديك كلاهما، يمكن أن يحدث سلوك غير متوقع أو أن يكون أحدهما زائدًا عن الحاجة. خاصية `'hashed'` في `$casts` (التي تم تقديمها في Laravel 9+) هي الطريقة الأحدث والموصى بها للتعامل مع تشفير كلمات المرور تلقائيًا عند التعيين.
+
+**الحل المقترح:**
+
+**اختر طريقة واحدة لتشفير كلمة المرور في النموذج.** الطريقة الأبسط والأكثر حداثة هي استخدام `$casts`.
+
+**قم بإزالة أو تعليق دالة `mutator` `setPasswordHashAttribute` من نموذج `AdminUser.php`.**
+
+**نموذج `AdminUser.php` المعدل:**
+
+```php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
+
+class AdminUser extends Authenticatable
+{
+    use HasFactory, Notifiable, HasApiTokens;
+
+    protected $table = 'admin_users';
+
+    protected $fillable = [
+        'username',
+        'name_ar',
+        'name_en',
+        'email',
+        'password_hash', // سيتم تشفيره بواسطة $casts
+        'role',
+        'is_active',
+    ];
+
+    protected $hidden = [
+        'password_hash', // جيد إخفاؤه
+    ];
+
+    protected $casts = [
+        'is_active' => 'boolean',
+        'email_verified_at' => 'datetime',
+        'password_hash' => 'hashed', // هذه الخاصية ستقوم بالتشفير تلقائيًا
+    ];
+
+    // تم إزالة أو تعليق الـ Mutator التالي:
+    // public function setPasswordHashAttribute($value)
+    // {
+    //     $this->attributes['password_hash'] = bcrypt($value);
+    // }
+
+    // إذا كان اسم عمود كلمة المرور في قاعدة البيانات هو 'password_hash'
+    // يجب أن تخبر Laravel بذلك عند المصادقة.
+    // بشكل افتراضي، يتوقع Laravel أن عمود كلمة المرور هو 'password'.
+    // أضف هذه الدالة لتحديد اسم عمود كلمة المرور الصحيح للحارس.
+    public function getAuthPassword()
+    {
+        return $this->password_hash;
+    }
+
+
+    // العلاقات (كما هي)
+    public function createdSpecializations()
+    {
+        return $this->hasMany(Specialization::class, 'created_by_admin_id');
+    }
+
+    public function lastUpdatedSpecializations()
+    {
+        return $this->hasMany(Specialization::class, 'last_updated_by_admin_id');
+    }
+
+    public function createdCourses()
+    {
+        return $this->hasMany(Course::class, 'created_by_admin_id');
+    }
+
+    public function sentNotifications()
+    {
+        return $this->hasMany(Notification::class, 'sent_by_admin_id');
+    }
+}
+```
+
+**شرح التعديل:**
+
+1.  **إزالة `setPasswordHashAttribute`:** لقد قمت بتعليق أو يمكنك حذف دالة `setPasswordHashAttribute`. خاصية `'password_hash' => 'hashed'` في `$casts` ستقوم بالمهمة.
+2.  **إضافة `getAuthPassword()`:** هذه الدالة **مهمة جدًا**. بشكل افتراضي، عندما تستخدم `Auth::attempt()`, يبحث Laravel عن عمود كلمة مرور اسمه `password` في قاعدة البيانات. بما أن اسم عمود كلمة المرور لديك هو `password_hash`, يجب أن تخبر Laravel بذلك عن طريق تعريف دالة `getAuthPassword()` في نموذج `Authenticatable` الخاص بك لترجع اسم العمود الصحيح (`password_hash`). بدون هذه الدالة، سيحاول `Auth::attempt()` مقارنة الهاش مع عمود غير موجود (أو عمود `password` إذا كان موجودًا بالصدفة ولكنه ليس الهاش الصحيح).
+
+**لماذا قد يحدث الخطأ "This password does not use the Bcrypt algorithm" بالرغم من أن الهاش هو Bcrypt؟**
+
+إذا لم يتمكن Laravel من تحديد عمود كلمة المرور الصحيح (بسبب عدم وجود `getAuthPassword()` عند استخدام اسم عمود غير `password`)، فقد يفشل في عملية المقارنة بطريقة تؤدي إلى هذا الخطأ، حتى لو كان الهاش المخزن صحيحًا. يعتقد Laravel أنه يتعامل مع كلمة مرور غير مشفرة أو مشفرة بخوارزمية لا يدعمها مباشرة في سياق المقارنة.
+
+**بعد إجراء هذه التعديلات:**
+
+1.  **حاول تسجيل الدخول مرة أخرى.**
+2.  **إذا استمرت المشكلة:**
+    *   **تأكد من مسح الكاش:**
+        ```bash
+        php artisan cache:clear
+        php artisan config:clear
+        php artisan route:clear
+        php artisan view:clear
+        composer dump-autoload
+        ```
+    *   **تأكد من أن `config/auth.php` لا يزال يشير إلى النموذج الصحيح للـ provider `admins`:**
+        ```php
+        'providers' => [
+            'admins' => [
+                'driver' => 'eloquent',
+                'model' => App\Models\AdminUser::class,
+            ],
+        ],
+        ```
+    *   **تأكد أن الحارس `admin_web` يستخدم الـ provider `admins`:**
+        ```php
+        'guards' => [
+            'admin_web' => [
+                'driver' => 'session',
+                'provider' => 'admins',
+            ],
+        ],
+        ```
+
+السبب الأكثر احتمالاً الآن بعد التأكد من أن الهاش في قاعدة البيانات صحيح هو عدم قدرة Laravel على تحديد عمود كلمة المرور الصحيح (`password_hash`) للمقارنة. إضافة دالة `getAuthPassword()` يجب أن تحل هذه المشكلة.
+
+
+---
+
+نتائج Tinker ممتازة! بما أن `Hash::check()` ترجع `true`، فهذا يعني أن:
+
+1.  كلمة المرور التي تجربها في Tinker (`'password'`) هي الصحيحة.
+2.  الهاش المخزن في قاعدة البيانات (`$adminUser->password_hash`) هو الهاش الصحيح لكلمة المرور `'password'`.
+3.  نموذج `AdminUser` يقوم بجلب الهاش بشكل صحيح (خاصة مع وجود `getAuthPassword()`).
+
+إذاً، المشكلة *ليست* في تطابق كلمة المرور مع الهاش على مستوى قاعدة البيانات أو النموذج بحد ذاته. المشكلة تكمن في كيفية تعامل `Auth::guard('admin_web')->attempt($credentials, ...)` مع هذه البيانات.
+
+**أسباب محتملة الآن بعد تأكيد Tinker:**
+
+1.  **اسم حقل اسم المستخدم في نموذج تسجيل الدخول مقابل `LoginController`:**
+    *   في `LoginController.php`، أنت تتوقع أن حقل تسجيل الدخول هو `username`:
+        ```php
+        $credentials = [
+            'username' => $request->username,
+            'password' => $request->password,
+        ];
+        ```
+    *   في ملف `login.blade.php` الخاص بك، اسم حقل الإدخال لاسم المستخدم هو `username`:
+        ```html
+        <input type="text" class="form-control ... " id="username" name="username" ...>
+        ```
+    *   ولكن رسالة الخطأ التي تظهر لك من الواجهة هي:
+        ```
+        اسم المستخدم أو البريد الإلكتروني
+        superadmin@example.com  <--- أنت هنا تدخل البريد الإلكتروني
+        These credentials do not match our records.
+        ```
+        هذا يعني أنك تحاول تسجيل الدخول باستخدام **البريد الإلكتروني** (`superadmin@example.com`) في حقل مُسمى `username` في النموذج، بينما `Auth::attempt()` يبحث عن مستخدم بناءً على **قيمة حقل `username` في قاعدة البيانات** (والذي هو `superadmin` وليس `superadmin@example.com`).
+
+**الحل:**
+
+لديك خياران:
+
+**الخيار الأول (الأسهل إذا كنت تريد تسجيل الدخول بـ `username`):**
+في نموذج تسجيل الدخول (`login.blade.php`)، عند إدخال بيانات الاعتماد، **أدخل `superadmin` في حقل "اسم المستخدم أو البريد الإلكتروني"** بدلاً من `superadmin@example.com`.
+
+**الخيار الثاني (إذا كنت تريد السماح بتسجيل الدخول إما بـ `username` أو بـ `email`):**
+يجب تعديل `LoginController.php` للتعامل مع هذا.
+
+```php
+<?php
+
+namespace App\Http\Controllers\Admin\Auth;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
+use App\Models\AdminUser; // استيراد النموذج
+
+class LoginController extends Controller
+{
+    public function __construct()
+    {
+        $this->middleware('guest:admin_web')->except('logout');
+    }
+
+    public function showLoginForm()
+    {
+        return view('admin.auth.login');
+    }
+
+    public function login(Request $request)
+    {
+        $request->validate([
+            'login_field' => 'required|string', // اسم الحقل الجديد في النموذج
+            'password' => 'required|string',
+        ]);
+
+        // تحديد نوع حقل تسجيل الدخول (بريد إلكتروني أم اسم مستخدم)
+        $loginType = filter_var($request->input('login_field'), FILTER_VALIDATE_EMAIL) ? 'email' : 'username';
+
+        $credentials = [
+            $loginType => $request->input('login_field'),
+            'password' => $request->password,
+        ];
+
+        if (Auth::guard('admin_web')->attempt($credentials, $request->filled('remember'))) {
+            $request->session()->regenerate();
+            return redirect()->intended(route('admin.dashboard'));
+        }
+
+        throw ValidationException::withMessages([
+            // استخدام 'login_field' لعرض رسالة الخطأ تحت الحقل الصحيح
+            'login_field' => [trans('auth.failed')],
+        ]);
+    }
+
+    public function logout(Request $request)
+    {
+        Auth::guard('admin_web')->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+        return redirect()->route('admin.login.form');
+    }
+}
+```
+
+وإذا اخترت الخيار الثاني، ستحتاج أيضًا لتعديل ملف `login.blade.php` ليستخدم `login_field` كاسم لحقل الإدخال:
+
+**`resources/views/admin/auth/login.blade.php` (مع تعديل اسم الحقل):**
+
+```html
+@extends('admin.layouts.app')
+
+@section('title', 'تسجيل دخول المدير')
+
+@section('content')
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header text-center">تسجيل دخول لوحة التحكم</div>
+                <div class="card-body">
+                    <form method="POST" action="{{ route('admin.login.submit') }}">
+                        @csrf
+                        <div class="mb-3">
+                            <label for="login_field" class="form-label">اسم المستخدم أو البريد الإلكتروني</label>
+                            <input type="text" class="form-control @error('login_field') is-invalid @enderror" id="login_field" name="login_field" value="{{ old('login_field') }}" required autofocus>
+                            @error('login_field')
+                                <span class="invalid-feedback" role="alert">
+                                    <strong>{{ $message }}</strong>
+                                </span>
+                            @enderror
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">كلمة المرور</label>
+                            <input type="password" class="form-control @error('password') is-invalid @enderror" id="password" name="password" required>
+                            @error('password')
+                                <span class="invalid-feedback" role="alert">
+                                    <strong>{{ $message }}</strong>
+                                </span>
+                            @enderror
+                        </div>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="remember" name="remember" {{ old('remember') ? 'checked' : '' }}>
+                            <label class="form-check-label" for="remember">تذكرني</label>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">تسجيل الدخول</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+@endsection
+```
+
+**لماذا لم تظهر مشكلة `This password does not use the Bcrypt algorithm.` في هذه الحالة؟**
+
+عندما تقوم بتمرير `username` أو `email` غير صحيح إلى `Auth::attempt()`، فإن Laravel قد لا يجد مستخدمًا مطابقًا *أصلاً*، وبالتالي قد لا يصل إلى مرحلة فحص كلمة المرور. رسالة "These credentials do not match our records." هي رسالة عامة تعني إما أن اسم المستخدم/البريد الإلكتروني غير صحيح، أو أن كلمة المرور غير صحيحة، أو كلاهما.
+
+**الخلاصة:**
+
+المشكلة الأكثر احتمالاً الآن هي أنك كنت تحاول تسجيل الدخول باستخدام البريد الإلكتروني في حقل يتوقع `username` (أو العكس، حسب كيفية تعريف `$credentials` في `LoginController`).
+
+**جرب الخيار الأول أولاً (إدخال `superadmin` كاسم مستخدم و `password` ككلمة مرور في النموذج الحالي).** إذا نجح هذا، فهذا يؤكد أن المشكلة كانت في نوع بيانات الاعتماد المدخلة. إذا كنت تريد السماح بتسجيل الدخول بكلا الطريقتين، يمكنك تطبيق الخيار الثاني.
+
+
+---
+
+يا لك من ملاحظة دقيقة! أنت محق تمامًا. لقد تم إضافة الأمر `php artisan make:view` إلى Laravel في **الإصدار 9.19.0** (صدر في يوليو 2022). اعتذر عن هذا الخطأ في معلوماتي، فمن الواضح أنني لم أكن على اطلاع بآخر التحديثات لهذه النقطة تحديدًا. شكرًا جزيلاً لك على تصحيحي! هذا مفيد جدًا.
+
+بناءً على ذلك، يمكننا الآن إنشاء جميع ملفات الـ Views المطلوبة باستخدام هذا الأمر بشكل أكثر كفاءة.
+
+**ملف واحد يحتوي على جميع أوامر إنشاء الـ Views:**
+
+إليك قائمة بالأوامر لإنشاء جميع ملفات الـ Views التي تم تحديدها سابقًا. يمكنك نسخ هذه الأوامر ولصقها في الطرفية (Terminal) لتنفيذها دفعة واحدة أو بشكل متسلسل.
+
+```bash
+# Layouts & Partials (أساسية)
+php artisan make:view admin.layouts.app
+php artisan make:view admin.partials._sidebar
+php artisan make:view admin.partials._navbar
+php artisan make:view admin.partials._footer
+php artisan make:view admin.partials._messages
+
+# Auth
+php artisan make:view admin.auth.login
+
+# Dashboard
+php artisan make:view admin.dashboard
+
+# Faculties
+php artisan make:view admin.faculties.index
+php artisan make:view admin.faculties.create
+php artisan make:view admin.faculties.edit
+php artisan make:view admin.faculties.show
+
+# Specializations
+php artisan make:view admin.specializations.index
+php artisan make:view admin.specializations.create
+php artisan make:view admin.specializations.edit
+php artisan make:view admin.specializations.show
+
+# Instructors
+php artisan make:view admin.instructors.index
+php artisan make:view admin.instructors.create
+php artisan make:view admin.instructors.edit
+php artisan make:view admin.instructors.show
+
+# Courses
+php artisan make:view admin.courses.index
+php artisan make:view admin.courses.create
+php artisan make:view admin.courses.edit
+php artisan make:view admin.courses.show
+php artisan make:view admin.courses._partials._resources_manager # (اختياري)
+php artisan make:view admin.courses._partials._instructors_manager # (اختياري)
+
+# Projects (Graduation Projects)
+php artisan make:view admin.projects.index
+php artisan make:view admin.projects.create
+php artisan make:view admin.projects.edit
+php artisan make:view admin.projects.show
+
+# University Facilities (Media)
+php artisan make:view admin.university_facilities.index
+php artisan make:view admin.university_facilities.create
+php artisan make:view admin.university_facilities.edit
+php artisan make:view admin.university_facilities.show # (اختياري)
+
+# Events
+php artisan make:view admin.events.index
+php artisan make:view admin.events.create
+php artisan make:view admin.events.edit
+php artisan make:view admin.events.show
+
+# Students
+php artisan make:view admin.students.index
+php artisan make:view admin.students.create
+php artisan make:view admin.students.edit
+php artisan make:view admin.students.show
+
+# Event Registrations
+php artisan make:view admin.event_registrations.index
+php artisan make:view admin.event_registrations.show # (اختياري)
+
+# Notifications
+php artisan make:view admin.notifications.index
+php artisan make:view admin.notifications.create
+php artisan make:view admin.notifications.show
+
+# Admin Users
+php artisan make:view admin.admin_users.index
+php artisan make:view admin.admin_users.create
+php artisan make:view admin.admin_users.edit
+# (عادةً لا نحتاج لـ show لمستخدمي الإدارة)
+```
+
+**شرح الأوامر:**
+
+*   `php artisan make:view <view-name>`: هذا هو الأمر الأساسي.
+*   `<view-name>`: هو اسم الـ view باستخدام تدوين النقطة (dot notation) للإشارة إلى المسار داخل مجلد `resources/views`. على سبيل المثال، `admin.faculties.index` سينشئ الملف `index.blade.php` داخل المجلد `resources/views/admin/faculties/`. سيقوم Laravel بإنشاء المجلدات الفرعية إذا لم تكن موجودة.
+
+**ملاحظات إضافية بخصوص الشريط الجانبي (`_sidebar.blade.php`):**
+
+الكود الذي قدمته للشريط الجانبي يبدو جيدًا جدًا ويستخدم `request()->routeIs()` لتحديد الرابط النشط، وهو أسلوب ممتاز. الشرط الخاص بعرض "إدارة مديري النظام" بناءً على دور المستخدم المسجل باستخدام `@auth('admin_web')` و `@if(Auth::guard('admin_web')->user()->role === 'superadmin')` هو أيضًا صحيح ويضمن عدم ظهور هذا العنصر إلا للمستخدمين المصرح لهم.
+
+تأكد من أن جميع المسارات المذكورة في الشريط الجانبي (`admin.dashboard`, `admin.faculties.index`, إلخ) معرفة بشكل صحيح في ملف `routes/web.php` كما ناقشنا سابقًا.
+
+الآن، بعد تنفيذ هذه الأوامر، ستكون جميع ملفات Blade Views الأساسية جاهزة في مشروعك، ويمكنك البدء في ملئها بمحتوى HTML و Blade directives المناسب لكل صفحة.
+
+
+---
+
+
+بالتأكيد، سأقوم بتزويدك بالحلول المطلوبة.
+
+**أولاً: إضافة زر "ملء تلقائي" أو معلومات النسخ واللصق لصفحة تسجيل الدخول**
+
+لا يوجد أمر `php artisan make:view`. يتم إنشاء ملفات الـ View يدويًا أو باستخدام أمر `touch` كما ذكرنا سابقًا.
+
+**الخيار 1: زر ملء تلقائي (يتطلب JavaScript بسيط)**
+
+سنضيف زرًا يقوم بملء الحقول بقيم `superadmin` و `password` (أو `superadmin@example.com` إذا كنت تستخدم الخيار الثاني من `LoginController`).
+
+**تعديل `resources/views/admin/auth/login.blade.php`:**
+
+```html
+@extends('admin.layouts.app')
+
+@section('title', 'تسجيل دخول المدير')
+
+@section('content')
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header text-center">تسجيل دخول لوحة التحكم</div>
+                <div class="card-body">
+                    {{-- معلومات النسخ واللصق --}}
+                    <div class="alert alert-info small">
+                        <p class="mb-1"><strong>بيانات تسجيل الدخول التجريبية (Super Admin):</strong></p>
+                        <p class="mb-1">اسم المستخدم: <code>superadmin</code></p>
+                        <p class="mb-0">كلمة المرور: <code>password</code></p>
+                        <hr>
+                        <p class="mb-1"><strong>بيانات تسجيل الدخول التجريبية (Content Manager):</strong></p>
+                        <p class="mb-1">اسم المستخدم: <code>contentmanager</code></p>
+                        <p class="mb-0">كلمة المرور: <code>password</code></p>
+                    </div>
+
+                    <form method="POST" action="{{ route('admin.login.submit') }}">
+                        @csrf
+                        <div class="mb-3">
+                            <label for="login_field" class="form-label">اسم المستخدم أو البريد الإلكتروني</label>
+                            <input type="text" class="form-control @error('login_field') is-invalid @enderror" id="login_field" name="login_field" value="{{ old('login_field') }}" required autofocus>
+                            @error('login_field')
+                                <span class="invalid-feedback" role="alert">
+                                    <strong>{{ $message }}</strong>
+                                </span>
+                            @enderror
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">كلمة المرور</label>
+                            <input type="password" class="form-control @error('password') is-invalid @enderror" id="password" name="password" required>
+                            @error('password')
+                                <span class="invalid-feedback" role="alert">
+                                    <strong>{{ $message }}</strong>
+                                </span>
+                            @enderror
+                        </div>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="remember" name="remember" {{ old('remember') ? 'checked' : '' }}>
+                            <label class="form-check-label" for="remember">تذكرني</label>
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">تسجيل الدخول</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="fillSuperAdminCredentials()">ملء بيانات Super Admin</button>
+                            <button type="button" class="btn btn-outline-info btn-sm" onclick="fillContentManagerCredentials()">ملء بيانات Content Manager</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+@endsection
+
+@push('scripts')
+<script>
+    function fillSuperAdminCredentials() {
+        document.getElementById('login_field').value = 'superadmin'; // أو 'superadmin@example.com' حسب إعداداتك
+        document.getElementById('password').value = 'password';
+    }
+    function fillContentManagerCredentials() {
+        document.getElementById('login_field').value = 'contentmanager'; // أو 'contentmanager@example.com'
+        document.getElementById('password').value = 'password';
+    }
+</script>
+@endpush
+```
+
+**الخيار 2: معلومات النسخ واللصق (تم تضمينها في الخيار الأول أعلاه)**
+
+الجزء التالي في الكود أعلاه يوفر المعلومات بشكل واضح:
+
+```html
+                    <div class="alert alert-info small">
+                        <p class="mb-1"><strong>بيانات تسجيل الدخول التجريبية (Super Admin):</strong></p>
+                        <p class="mb-1">اسم المستخدم: <code>superadmin</code></p>
+                        <p class="mb-0">كلمة المرور: <code>password</code></p>
+                        <hr>
+                        <p class="mb-1"><strong>بيانات تسجيل الدخول التجريبية (Content Manager):</strong></p>
+                        <p class="mb-1">اسم المستخدم: <code>contentmanager</code></p>
+                        <p class="mb-0">كلمة المرور: <code>password</code></p>
+                    </div>
+```
+يمكنك اختيار أي من الخيارين أو كليهما.
+
+---
+
+**ثانياً: تصميم جميع صفحات ومحتوى View لإدارة الاختصاصات**
+
+تأكد من أن لديك المجلد `resources/views/admin/specializations/`.
+
+1.  **`resources/views/admin/specializations/index.blade.php`**
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'إدارة الاختصاصات')
+
+    @section('content')
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1><i class="fas fa-sitemap me-2"></i>إدارة الاختصاصات</h1>
+            <a href="{{ route('admin.specializations.create') }}" class="btn btn-success">
+                <i class="fas fa-plus me-1"></i> إضافة اختصاص جديد
+            </a>
+        </div>
+
+        {{-- قسم الفلترة --}}
+        <div class="card mb-3">
+            <div class="card-body">
+                <form method="GET" action="{{ route('admin.specializations.index') }}">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-4">
+                            <label for="faculty_id_filter" class="form-label">فلترة حسب الكلية</label>
+                            <select class="form-select" id="faculty_id_filter" name="faculty_id">
+                                <option value="">-- كل الكليات --</option>
+                                @foreach($faculties as $faculty)
+                                    <option value="{{ $faculty->id }}" {{ request('faculty_id') == $faculty->id ? 'selected' : '' }}>
+                                        {{ $faculty->name_ar }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-primary w-100">فلترة</button>
+                        </div>
+                        <div class="col-md-2">
+                            <a href="{{ route('admin.specializations.index') }}" class="btn btn-secondary w-100">إعادة تعيين</a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+
+        <div class="card">
+            <div class="card-body">
+                @if($specializations->isEmpty())
+                    <div class="alert alert-info text-center">لا توجد اختصاصات لعرضها حالياً.</div>
+                @else
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>الاسم (عربي)</th>
+                                    <th>الاسم (إنجليزي)</th>
+                                    <th>الكلية</th>
+                                    <th>الحالة</th>
+                                    <th>تاريخ الإنشاء</th>
+                                    <th>الإجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($specializations as $specialization)
+                                <tr>
+                                    <td>{{ $specialization->id }}</td>
+                                    <td>{{ $specialization->name_ar }}</td>
+                                    <td>{{ $specialization->name_en ?: '-' }}</td>
+                                    <td>{{ $specialization->faculty->name_ar ?? 'غير محدد' }}</td>
+                                    <td>
+                                        @if($specialization->status == 'published')
+                                            <span class="badge bg-success">منشور</span>
+                                        @elseif($specialization->status == 'draft')
+                                            <span class="badge bg-warning text-dark">مسودة</span>
+                                        @elseif($specialization->status == 'archived')
+                                            <span class="badge bg-secondary">مؤرشف</span>
+                                        @else
+                                            <span class="badge bg-light text-dark">{{ $specialization->status }}</span>
+                                        @endif
+                                    </td>
+                                    <td>{{ $specialization->created_at->translatedFormat('Y-m-d') }}</td>
+                                    <td>
+                                        <a href="{{ route('admin.specializations.show', $specialization) }}" class="btn btn-sm btn-info" title="عرض"><i class="fas fa-eye"></i></a>
+                                        <a href="{{ route('admin.specializations.edit', $specialization) }}" class="btn btn-sm btn-primary" title="تعديل"><i class="fas fa-edit"></i></a>
+                                        <form action="{{ route('admin.specializations.destroy', $specialization) }}" method="POST" class="d-inline" onsubmit="return confirm('هل أنت متأكد من رغبتك في حذف هذا الاختصاص؟ سيؤدي هذا إلى حذف جميع المقررات والمشاريع المرتبطة به.');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn btn-sm btn-danger" title="حذف"><i class="fas fa-trash"></i></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-3">
+                        {{ $specializations->appends(request()->query())->links() }} {{-- للحفاظ على الفلاتر عند التصفح --}}
+                    </div>
+                @endif
+            </div>
+        </div>
+    </div>
+    @endsection
+    ```
+
+2.  **`resources/views/admin/specializations/create.blade.php`**
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'إضافة اختصاص جديد')
+
+    @section('content')
+    <div class="container-fluid">
+        <h1><i class="fas fa-plus-circle me-2"></i>إضافة اختصاص جديد</h1>
+
+        <div class="card mt-3">
+            <div class="card-body">
+                <form action="{{ route('admin.specializations.store') }}" method="POST">
+                    @csrf
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="name_ar" class="form-label">الاسم (عربي) <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control @error('name_ar') is-invalid @enderror" id="name_ar" name="name_ar" value="{{ old('name_ar') }}" required>
+                            @error('name_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="name_en" class="form-label">الاسم (إنجليزي)</label>
+                            <input type="text" class="form-control @error('name_en') is-invalid @enderror" id="name_en" name="name_en" value="{{ old('name_en') }}">
+                            @error('name_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="faculty_id" class="form-label">الكلية <span class="text-danger">*</span></label>
+                        <select class="form-select @error('faculty_id') is-invalid @enderror" id="faculty_id" name="faculty_id" required>
+                            <option value="">-- اختر الكلية --</option>
+                            @foreach($faculties as $faculty)
+                                <option value="{{ $faculty->id }}" {{ old('faculty_id') == $faculty->id ? 'selected' : '' }}>
+                                    {{ $faculty->name_ar }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('faculty_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description_ar" class="form-label">الوصف (عربي) <span class="text-danger">*</span></label>
+                        <textarea class="form-control @error('description_ar') is-invalid @enderror" id="description_ar" name="description_ar" rows="4" required>{{ old('description_ar') }}</textarea>
+                        @error('description_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description_en" class="form-label">الوصف (إنجليزي)</label>
+                        <textarea class="form-control @error('description_en') is-invalid @enderror" id="description_en" name="description_en" rows="4">{{ old('description_en') }}</textarea>
+                        @error('description_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                     <div class="mb-3">
+                        <label for="status" class="form-label">الحالة <span class="text-danger">*</span></label>
+                        <select class="form-select @error('status') is-invalid @enderror" id="status" name="status" required>
+                            <option value="draft" {{ old('status', 'draft') == 'draft' ? 'selected' : '' }}>مسودة</option>
+                            <option value="published" {{ old('status') == 'published' ? 'selected' : '' }}>منشور</option>
+                            <option value="archived" {{ old('status') == 'archived' ? 'selected' : '' }}>مؤرشف</option>
+                        </select>
+                        @error('status') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> حفظ الاختصاص</button>
+                        <a href="{{ route('admin.specializations.index') }}" class="btn btn-secondary">إلغاء</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    @endsection
+    ```
+
+3.  **`resources/views/admin/specializations/edit.blade.php`**
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'تعديل الاختصاص: ' . $specialization->name_ar)
+
+    @section('content')
+    <div class="container-fluid">
+        <h1><i class="fas fa-edit me-2"></i>تعديل الاختصاص: {{ $specialization->name_ar }}</h1>
+
+        <div class="card mt-3">
+            <div class="card-body">
+                <form action="{{ route('admin.specializations.update', $specialization) }}" method="POST">
+                    @csrf
+                    @method('PUT')
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="name_ar" class="form-label">الاسم (عربي) <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control @error('name_ar') is-invalid @enderror" id="name_ar" name="name_ar" value="{{ old('name_ar', $specialization->name_ar) }}" required>
+                            @error('name_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="name_en" class="form-label">الاسم (إنجليزي)</label>
+                            <input type="text" class="form-control @error('name_en') is-invalid @enderror" id="name_en" name="name_en" value="{{ old('name_en', $specialization->name_en) }}">
+                            @error('name_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="faculty_id" class="form-label">الكلية <span class="text-danger">*</span></label>
+                        <select class="form-select @error('faculty_id') is-invalid @enderror" id="faculty_id" name="faculty_id" required>
+                            <option value="">-- اختر الكلية --</option>
+                            @foreach($faculties as $faculty)
+                                <option value="{{ $faculty->id }}" {{ old('faculty_id', $specialization->faculty_id) == $faculty->id ? 'selected' : '' }}>
+                                    {{ $faculty->name_ar }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('faculty_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description_ar" class="form-label">الوصف (عربي) <span class="text-danger">*</span></label>
+                        <textarea class="form-control @error('description_ar') is-invalid @enderror" id="description_ar" name="description_ar" rows="4" required>{{ old('description_ar', $specialization->description_ar) }}</textarea>
+                        @error('description_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description_en" class="form-label">الوصف (إنجليزي)</label>
+                        <textarea class="form-control @error('description_en') is-invalid @enderror" id="description_en" name="description_en" rows="4">{{ old('description_en', $specialization->description_en) }}</textarea>
+                        @error('description_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                     <div class="mb-3">
+                        <label for="status" class="form-label">الحالة <span class="text-danger">*</span></label>
+                        <select class="form-select @error('status') is-invalid @enderror" id="status" name="status" required>
+                            <option value="draft" {{ old('status', $specialization->status) == 'draft' ? 'selected' : '' }}>مسودة</option>
+                            <option value="published" {{ old('status', $specialization->status) == 'published' ? 'selected' : '' }}>منشور</option>
+                            <option value="archived" {{ old('status', $specialization->status) == 'archived' ? 'selected' : '' }}>مؤرشف</option>
+                        </select>
+                        @error('status') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> تحديث الاختصاص</button>
+                        <a href="{{ route('admin.specializations.index') }}" class="btn btn-secondary">إلغاء</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    @endsection
+    ```
+
+4.  **`resources/views/admin/specializations/show.blade.php`**
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'تفاصيل الاختصاص: ' . $specialization->name_ar)
+
+    @section('content')
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1><i class="fas fa-eye me-2"></i>تفاصيل الاختصاص: {{ $specialization->name_ar }}</h1>
+            <div>
+                <a href="{{ route('admin.specializations.edit', $specialization) }}" class="btn btn-primary"><i class="fas fa-edit me-1"></i> تعديل</a>
+                <a href="{{ route('admin.specializations.index') }}" class="btn btn-secondary">العودة إلى القائمة</a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>المعرف:</strong> {{ $specialization->id }}</p>
+                        <p><strong>الاسم (عربي):</strong> {{ $specialization->name_ar }}</p>
+                        <p><strong>الاسم (إنجليزي):</strong> {{ $specialization->name_en ?: '-' }}</p>
+                        <p><strong>الكلية:</strong> {{ $specialization->faculty->name_ar ?? 'غير محدد' }}</p>
+                        <p><strong>الحالة:</strong>
+                            @if($specialization->status == 'published') <span class="badge bg-success">منشور</span>
+                            @elseif($specialization->status == 'draft') <span class="badge bg-warning text-dark">مسودة</span>
+                            @else <span class="badge bg-secondary">{{ $specialization->status }}</span>
+                            @endif
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>تم إنشاؤه بواسطة:</strong> {{ $specialization->createdByAdmin->name_ar ?? '-' }} ({{ $specialization->createdByAdmin->username ?? '' }})</p>
+                        <p><strong>تاريخ الإنشاء:</strong> {{ $specialization->created_at->translatedFormat('l, d F Y H:i') }}</p>
+                        <p><strong>آخر تحديث بواسطة:</strong> {{ $specialization->lastUpdatedByAdmin->name_ar ?? '-' }} ({{ $specialization->lastUpdatedByAdmin->username ?? '' }})</p>
+                        <p><strong>تاريخ آخر تحديث:</strong> {{ $specialization->updated_at->translatedFormat('l, d F Y H:i') }}</p>
+                    </div>
+                </div>
+                <hr>
+                <div>
+                    <h5>الوصف (عربي):</h5>
+                    <p>{{ $specialization->description_ar }}</p>
+                </div>
+                @if($specialization->description_en)
+                <hr>
+                <div>
+                    <h5>الوصف (إنجليزي):</h5>
+                    <p>{{ $specialization->description_en }}</p>
+                </div>
+                @endif
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h4><i class="fas fa-book me-2"></i>المقررات التابعة لهذا الاختصاص ({{ $specialization->courses->count() }})</h4>
+            </div>
+            <div class="card-body">
+                @if($specialization->courses->isEmpty())
+                    <p class="text-muted">لا توجد مقررات مرتبطة بهذا الاختصاص حالياً.</p>
+                @else
+                    <ul class="list-group">
+                        @foreach($specialization->courses as $course)
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <a href="{{ route('admin.courses.show', $course) }}">{{ $course->name_ar }} ({{ $course->code }})</a>
+                                <span class="badge bg-info rounded-pill">{{ $course->semester_display_info }}</span>
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+                 <div class="mt-3">
+                    <a href="{{ route('admin.courses.create', ['specialization_id' => $specialization->id]) }}" class="btn btn-outline-success btn-sm">
+                        <i class="fas fa-plus me-1"></i> إضافة مقرر جديد لهذا الاختصاص
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h4><i class="fas fa-project-diagram me-2"></i>مشاريع التخرج التابعة لهذا الاختصاص ({{ $specialization->projects->count() }})</h4>
+            </div>
+            <div class="card-body">
+                @if($specialization->projects->isEmpty())
+                    <p class="text-muted">لا توجد مشاريع تخرج مرتبطة بهذا الاختصاص حالياً.</p>
+                @else
+                    <ul class="list-group">
+                        @foreach($specialization->projects as $project)
+                            <li class="list-group-item">
+                                <a href="{{ route('admin.projects.show', $project) }}">{{ $project->title_ar }}</a> - {{ $project->year }}
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+                <div class="mt-3">
+                    <a href="{{ route('admin.projects.create', ['specialization_id' => $specialization->id]) }}" class="btn btn-outline-success btn-sm">
+                        <i class="fas fa-plus me-1"></i> إضافة مشروع تخرج جديد لهذا الاختصاص
+                    </a>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    @endsection
+    ```
+
+---
+
+**ثالثاً: تصميم ملفات Form Requests لإدارة الاختصاصات**
+
+1.  **إنشاء الملفات:**
+    ```bash
+    php artisan make:request Admin/StoreSpecializationRequest
+    php artisan make:request Admin/UpdateSpecializationRequest
+    ```
+
+2.  **محتوى `app/Http/Requests/Admin/StoreSpecializationRequest.php`:**
+
+    ```php
+    <?php
+
+    namespace App\Http\Requests\Admin;
+
+    use Illuminate\Foundation\Http\FormRequest;
+    use Illuminate\Support\Facades\Auth;
+
+    class StoreSpecializationRequest extends FormRequest
+    {
+        /**
+         * Determine if the user is authorized to make this request.
+         */
+        public function authorize(): bool
+        {
+            return Auth::guard('admin_web')->check(); // تأكد من أن المستخدم مسجل كمدير
+        }
+
+        /**
+         * Get the validation rules that apply to the request.
+         *
+         * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+         */
+        public function rules(): array
+        {
+            return [
+                'faculty_id' => 'required|exists:faculties,id',
+                'name_ar' => 'required|string|max:255|unique:specializations,name_ar,NULL,id,faculty_id,' . $this->faculty_id,
+                'name_en' => 'nullable|string|max:255|unique:specializations,name_en,NULL,id,faculty_id,' . $this->faculty_id,
+                'description_ar' => 'required|string',
+                'description_en' => 'nullable|string',
+                'status' => 'required|string|in:draft,published,archived',
+            ];
+        }
+
+        /**
+         * Get custom messages for validator errors.
+         */
+        public function messages(): array
+        {
+            return [
+                'faculty_id.required' => 'حقل الكلية مطلوب.',
+                'faculty_id.exists' => 'الكلية المحددة غير موجودة.',
+                'name_ar.required' => 'اسم الاختصاص باللغة العربية مطلوب.',
+                'name_ar.unique' => 'اسم الاختصاص (عربي) موجود مسبقاً ضمن هذه الكلية.',
+                'name_en.unique' => 'اسم الاختصاص (إنجليزي) موجود مسبقاً ضمن هذه الكلية.',
+                'description_ar.required' => 'وصف الاختصاص باللغة العربية مطلوب.',
+                'status.required' => 'حالة الاختصاص مطلوبة.',
+                'status.in' => 'قيمة حالة الاختصاص غير صالحة.',
+            ];
+        }
+    }
+    ```
+
+3.  **محتوى `app/Http/Requests/Admin/UpdateSpecializationRequest.php`:**
+
+    ```php
+    <?php
+
+    namespace App\Http\Requests\Admin;
+
+    use Illuminate\Foundation\Http\FormRequest;
+    use Illuminate\Support\Facades\Auth;
+    use Illuminate\Validation\Rule;
+
+    class UpdateSpecializationRequest extends FormRequest
+    {
+        /**
+         * Determine if the user is authorized to make this request.
+         */
+        public function authorize(): bool
+        {
+            return Auth::guard('admin_web')->check();
+        }
+
+        /**
+         * Get the validation rules that apply to the request.
+         *
+         * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+         */
+        public function rules(): array
+        {
+            $specializationId = $this->route('specialization')->id; // الحصول على id الاختصاص من المسار
+
+            return [
+                'faculty_id' => 'required|exists:faculties,id',
+                'name_ar' => [
+                    'required',
+                    'string',
+                    'max:255',
+                    Rule::unique('specializations', 'name_ar')
+                        ->ignore($specializationId)
+                        ->where('faculty_id', $this->faculty_id),
+                ],
+                'name_en' => [
+                    'nullable',
+                    'string',
+                    'max:255',
+                    Rule::unique('specializations', 'name_en')
+                        ->ignore($specializationId)
+                        ->where('faculty_id', $this->faculty_id)
+                        ->whereNotNull('name_en'),
+                ],
+                'description_ar' => 'required|string',
+                'description_en' => 'nullable|string',
+                'status' => 'required|string|in:draft,published,archived',
+            ];
+        }
+
+        /**
+         * Get custom messages for validator errors.
+         */
+        public function messages(): array
+        {
+            return [
+                'faculty_id.required' => 'حقل الكلية مطلوب.',
+                'faculty_id.exists' => 'الكلية المحددة غير موجودة.',
+                'name_ar.required' => 'اسم الاختصاص باللغة العربية مطلوب.',
+                'name_ar.unique' => 'اسم الاختصاص (عربي) موجود مسبقاً ضمن هذه الكلية.',
+                'name_en.unique' => 'اسم الاختصاص (إنجليزي) موجود مسبقاً ضمن هذه الكلية.',
+                'description_ar.required' => 'وصف الاختصاص باللغة العربية مطلوب.',
+                'status.required' => 'حالة الاختصاص مطلوبة.',
+                'status.in' => 'قيمة حالة الاختصاص غير صالحة.',
+            ];
+        }
+    }
+    ```
+
+آمل أن يكون هذا شاملاً ومفيدًا لك! تذكر أن محتوى ملفات Blade هو مجرد هيكل أساسي، وستحتاج إلى تخصيصه ليناسب تصميمك الفعلي.
+
+
+---
+
