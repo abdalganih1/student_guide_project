@@ -15306,6 +15306,161 @@ paths:
 
 
 ---
+أنت قريب جدًا! رسالة الخطأ `SQLSTATE[42000]: Syntax error or access violation: 1072 Key column 'dean_id' doesn't exist in table` تعني أن الهجرة التي تحاول إضافة المفتاح الأجنبي `dean_id` في جدول `faculties` لا تستطيع العثور على عمود اسمه `dean_id` في هذا الجدول.
+
+هذا يحدث لأنك في الخطوة السابقة، عندما قمت بإزالة المفتاح الأجنبي مباشرة من هجرة `faculties`، قمت أيضًا بإزالة *إنشاء* العمود نفسه بشكل كامل:
+
+```php
+// ملف هجرة faculties المعدل
+public function up(): void
+{
+    Schema::create('faculties', function (Blueprint $table) {
+        $table->id();
+        $table->string('name_ar')->unique();
+        $table->string('name_en')->unique()->nullable();
+        $table->text('description_ar')->nullable();
+        $table->text('description_en')->nullable();
+        // تم إزالة: $table->foreignId('dean_id')->nullable()->constrained('instructors')->nullOnDelete();
+        // تم إزالة أيضاً: $table->integer('dean_id')->unsigned()->nullable(); // ربما نسيت هذا
+        $table->timestamps();
+    });
+}
+```
+
+عندما تقوم الهجرة الجديدة بتشغيل `Schema::table('faculties', function (Blueprint $table) { ... $table->foreign('dean_id')... });`, لا تجد عمود `dean_id` لتطبيق المفتاح الأجنبي عليه.
+
+**الحل:**
+
+يجب أن تتأكد من أن عمود المفتاح الأجنبي (أو على الأقل عمود من نوع صحيح للمفتاح) يتم إنشاؤه في ملف الهجرة الأصلي للجدول، حتى لو تم إضافة قيد المفتاح الأجنبي لاحقًا.
+
+**الخطوات لتصحيح ملف الهجرة `faculties`:**
+
+عدّل ملف هجرة `faculties` (`xxxx_xx_xx_xxxxxx_create_faculties_table.php`) ليتضمن تعريف عمود `dean_id` مرة أخرى، ولكن بدون قيد `foreignId` الذي يضيف المفتاح الأجنبي فوراً.
+
+```php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('faculties', function (Blueprint $table) {
+            $table->id();
+            $table->string('name_ar')->unique();
+            $table->string('name_en')->unique()->nullable();
+            $table->text('description_ar')->nullable();
+            $table->text('description_en')->nullable();
+            // أضف تعريف عمود dean_id هنا (من نوع integer unsigned)
+            $table->unsignedBigInteger('dean_id')->nullable(); // يطابق نوع id() في Laravel (BigInteger)
+
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('faculties');
+    }
+};
+```
+**ملاحظة:** استخدمت `unsignedBigInteger` هنا ليتطابق مع نوع المفتاح الأساسي الذي يُنشئه `id()` في Laravel (وهو `BIGINT UNSIGNED`). استخدام `unsignedInteger` قد يسبب مشاكل إذا تجاوزت قيمة الـ IDs الحد الأقصى لـ `INT`.
+
+**الخطوات اللازمة لتصحيح ملف الهجرة `instructors` (نفس المشكلة لـ `faculty_id`):**
+
+عدّل ملف هجرة `instructors` (`xxxx_xx_xx_xxxxxx_create_instructors_table.php`) ليتضمن تعريف عمود `faculty_id` مرة أخرى:
+
+```php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('instructors', function (Blueprint $table) {
+            $table->id();
+            // أضف تعريف عمود faculty_id هنا (من نوع integer unsigned)
+            $table->unsignedBigInteger('faculty_id')->nullable(); // يطابق نوع id() في Laravel (BigInteger)
+
+            $table->string('name_ar');
+            $table->string('name_en')->nullable();
+            $table->string('title', 100)->nullable();
+            $table->string('email')->unique()->nullable();
+            $table->string('office_location')->nullable();
+            $table->text('bio')->nullable();
+            $table->string('profile_picture_url')->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('instructors');
+    }
+};
+```
+
+**تعديل ملف الهجرة الجديد لإضافة المفاتيح الأجنبية ليتناسب مع `unsignedBigInteger`:**
+
+إذا استخدمت `unsignedBigInteger` لتعريف الأعمدة في ملفي الهجرة الأصليين، فعدّل ملف الهجرة الجديد الذي يضيف المفاتيح الأجنبية ليستخدم `foreignId` أو `foreign` مع نوع العمود الصحيح.
+
+```php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::table('faculties', function (Blueprint $table) {
+            // استخدم foreignId إذا كان النوع في الجدول الأصلي هو unsignedBigInteger
+            // أو استخدم foreign مع تحديد النوع والعمود إذا كنت تستخدم int/bigint
+            $table->foreignId('dean_id')->nullable()->constrained('instructors')->nullOnDelete();
+            // أو هكذا إذا أردت تحديد الاسم يدوياً والعمود كان unsignedBigInteger
+            // $table->foreign('dean_id')->references('id')->on('instructors')->nullOnDelete();
+        });
+
+        Schema::table('instructors', function (Blueprint $table) {
+            $table->foreignId('faculty_id')->nullable()->constrained('faculties')->nullOnDelete();
+             // أو هكذا إذا أردت تحديد الاسم يدوياً والعمود كان unsignedBigInteger
+            // $table->foreign('faculty_id')->references('id')->on('faculties')->nullOnDelete();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table('faculties', function (Blueprint $table) {
+            $table->dropForeign(['dean_id']);
+        });
+
+        Schema::table('instructors', function (Blueprint $table) {
+            $table->dropForeign(['faculty_id']);
+        });
+    }
+};
+```
+**ملاحظة:** استخدام `foreignId('column_name')->constrained('table_name')` هو الأسلوب الحديث والمفضل في Laravel وهو يفترض أن العمود في الجدول الأصلي هو `unsignedBigInteger`. إذا كانت الأعمدة التي عرفتها هي `unsignedBigInteger`، فإن الكود الأصلي لملف الهجرة الجديد الذي يضيف المفاتيح الأجنبية كان صحيحًا، والمشكلة كانت فقط في عدم وجود الأعمدة `dean_id` و `faculty_id` في الجداول الأصلية.
+
+**الخطوة النهائية:**
+
+بعد تعديل ملفي هجرة `faculties` و `instructors` لإعادة إضافة تعريف الأعمدة (`dean_id` و `faculty_id`)، وتأكيد أن ملف الهجرة الجديد الذي يضيف المفاتيح الأجنبية يأتي بعدهما في الترتيب، قم بتنفيذ الهجرة مرة أخرى:
+
+```bash
+php artisan migrate:fresh --seed
+```
+
+هذا يجب أن يحل مشكلة "Key column 'dean_id' doesn't exist in table" لأن الأعمدة ستكون موجودة عند محاولة إضافة قيود المفاتيح الأجنبية عليها.
 
 
 ---
