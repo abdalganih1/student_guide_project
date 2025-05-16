@@ -8340,3 +8340,798 @@ php artisan make:view admin.admin_users.edit
 
 ---
 
+تمام، سنقوم الآن بتصميم ملفات الـ Views الخاصة بإدارة المدرسين (`Instructors`) بالإضافة إلى ملفات الـ Form Requests (`StoreInstructorRequest` و `UpdateInstructorRequest`).
+
+**أولاً: إنشاء وتصميم ملفات Form Requests للمدرسين**
+
+1.  **إنشاء الملفات (إذا لم تكن قد أنشأتها بالفعل):**
+    ```bash
+    php artisan make:request Admin/StoreInstructorRequest
+    php artisan make:request Admin/UpdateInstructorRequest
+    ```
+
+2.  **محتوى `app/Http/Requests/Admin/StoreInstructorRequest.php`:**
+
+    ```php
+    <?php
+
+    namespace App\Http\Requests\Admin;
+
+    use Illuminate\Foundation\Http\FormRequest;
+    use Illuminate\Support\Facades\Auth;
+
+    class StoreInstructorRequest extends FormRequest
+    {
+        /**
+         * Determine if the user is authorized to make this request.
+         */
+        public function authorize(): bool
+        {
+            return Auth::guard('admin_web')->check(); // أو يمكنك إضافة تحقق من صلاحية معينة
+        }
+
+        /**
+         * Get the validation rules that apply to the request.
+         *
+         * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+         */
+        public function rules(): array
+        {
+            return [
+                'name_ar' => 'required|string|max:255',
+                'name_en' => 'nullable|string|max:255',
+                'email' => 'nullable|email|max:255|unique:instructors,email',
+                'title' => 'nullable|string|max:100',
+                'faculty_id' => 'nullable|exists:faculties,id',
+                'office_location' => 'nullable|string|max:255',
+                'bio' => 'nullable|string',
+                'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048', // حقل الصورة
+                'is_active' => 'required|boolean',
+            ];
+        }
+
+        /**
+         * Get custom messages for validator errors.
+         */
+        public function messages(): array
+        {
+            return [
+                'name_ar.required' => 'اسم المدرس باللغة العربية مطلوب.',
+                'email.unique' => 'هذا البريد الإلكتروني مستخدم مسبقاً.',
+                'email.email' => 'صيغة البريد الإلكتروني غير صحيحة.',
+                'faculty_id.exists' => 'الكلية المحددة غير موجودة.',
+                'profile_picture.image' => 'الملف المرفوع يجب أن يكون صورة.',
+                'profile_picture.mimes' => 'نوع الصورة غير مدعوم (الأنواع المدعومة: jpeg, png, jpg, gif, svg).',
+                'profile_picture.max' => 'حجم الصورة يجب ألا يتجاوز 2MB.',
+                'is_active.required' => 'حالة النشاط مطلوبة.',
+            ];
+        }
+    }
+    ```
+    **ملاحظة:** في `rules()`, استخدمت `profile_picture` كاسم لحقل ملف الصورة. ستحتاج إلى التأكد من أن اسم `input type="file"` في النموذج الخاص بك هو نفسه.
+
+3.  **محتوى `app/Http/Requests/Admin/UpdateInstructorRequest.php`:**
+
+    ```php
+    <?php
+
+    namespace App\Http\Requests\Admin;
+
+    use Illuminate\Foundation\Http\FormRequest;
+    use Illuminate\Support\Facades\Auth;
+    use Illuminate\Validation\Rule;
+
+    class UpdateInstructorRequest extends FormRequest
+    {
+        /**
+         * Determine if the user is authorized to make this request.
+         */
+        public function authorize(): bool
+        {
+            return Auth::guard('admin_web')->check();
+        }
+
+        /**
+         * Get the validation rules that apply to the request.
+         *
+         * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+         */
+        public function rules(): array
+        {
+            $instructorId = $this->route('instructor')->id; // الحصول على id المدرس من المسار
+
+            return [
+                'name_ar' => 'required|string|max:255',
+                'name_en' => 'nullable|string|max:255',
+                'email' => [
+                    'nullable',
+                    'email',
+                    'max:255',
+                    Rule::unique('instructors', 'email')->ignore($instructorId),
+                ],
+                'title' => 'nullable|string|max:100',
+                'faculty_id' => 'nullable|exists:faculties,id',
+                'office_location' => 'nullable|string|max:255',
+                'bio' => 'nullable|string',
+                'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+                'is_active' => 'required|boolean',
+                'remove_profile_picture' => 'nullable|boolean', // حقل اختياري لإزالة الصورة
+            ];
+        }
+
+        public function messages(): array
+        {
+            return [
+                'name_ar.required' => 'اسم المدرس باللغة العربية مطلوب.',
+                'email.unique' => 'هذا البريد الإلكتروني مستخدم مسبقاً.',
+                'email.email' => 'صيغة البريد الإلكتروني غير صحيحة.',
+                'faculty_id.exists' => 'الكلية المحددة غير موجودة.',
+                'profile_picture.image' => 'الملف المرفوع يجب أن يكون صورة.',
+                'profile_picture.mimes' => 'نوع الصورة غير مدعوم (الأنواع المدعومة: jpeg, png, jpg, gif, svg).',
+                'profile_picture.max' => 'حجم الصورة يجب ألا يتجاوز 2MB.',
+                'is_active.required' => 'حالة النشاط مطلوبة.',
+            ];
+        }
+    }
+    ```
+
+---
+
+**ثانياً: تصميم صفحات الـ View لإدارة المدرسين**
+
+تأكد من أن لديك المجلد `resources/views/admin/instructors/`.
+
+1.  **`resources/views/admin/instructors/index.blade.php`**
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'إدارة المدرسين')
+
+    @section('content')
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1><i class="fas fa-chalkboard-teacher me-2"></i>إدارة المدرسين</h1>
+            <a href="{{ route('admin.instructors.create') }}" class="btn btn-success">
+                <i class="fas fa-plus me-1"></i> إضافة مدرس جديد
+            </a>
+        </div>
+
+        {{-- قسم الفلترة --}}
+        <div class="card mb-3">
+            <div class="card-body">
+                <form method="GET" action="{{ route('admin.instructors.index') }}">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-4">
+                            <label for="faculty_id_filter" class="form-label">فلترة حسب الكلية</label>
+                            <select class="form-select" id="faculty_id_filter" name="faculty_id">
+                                <option value="">-- كل الكليات --</option>
+                                @foreach($faculties as $faculty)
+                                    <option value="{{ $faculty->id }}" {{ request('faculty_id') == $faculty->id ? 'selected' : '' }}>
+                                        {{ $faculty->name_ar }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        {{-- يمكنك إضافة فلاتر أخرى هنا (مثل الحالة: نشط/غير نشط) --}}
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-primary w-100">فلترة</button>
+                        </div>
+                        <div class="col-md-2">
+                            <a href="{{ route('admin.instructors.index') }}" class="btn btn-secondary w-100">إعادة تعيين</a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                @if($instructors->isEmpty())
+                    <div class="alert alert-info text-center">لا يوجد مدرسون لعرضهم حالياً.</div>
+                @else
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>الصورة</th>
+                                    <th>الاسم (عربي)</th>
+                                    <th>الاسم (إنجليزي)</th>
+                                    <th>اللقب</th>
+                                    <th>البريد الإلكتروني</th>
+                                    <th>الكلية</th>
+                                    <th>الحالة</th>
+                                    <th>الإجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($instructors as $instructor)
+                                <tr>
+                                    <td>{{ $instructor->id }}</td>
+                                    <td>
+                                        @if($instructor->profile_picture_url)
+                                            <img src="{{ Storage::url($instructor->profile_picture_url) }}" alt="{{ $instructor->name_ar }}" class="img-thumbnail" style="width: 50px; height: 50px; object-fit: cover;">
+                                        @else
+                                            <i class="fas fa-user-tie fa-2x text-secondary"></i>
+                                        @endif
+                                    </td>
+                                    <td>{{ $instructor->name_ar }}</td>
+                                    <td>{{ $instructor->name_en ?: '-' }}</td>
+                                    <td>{{ $instructor->title ?: '-' }}</td>
+                                    <td>{{ $instructor->email ?: '-' }}</td>
+                                    <td>{{ $instructor->faculty->name_ar ?? 'غير محدد' }}</td>
+                                    <td>
+                                        @if($instructor->is_active)
+                                            <span class="badge bg-success">نشط</span>
+                                        @else
+                                            <span class="badge bg-danger">غير نشط</span>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        <a href="{{ route('admin.instructors.show', $instructor) }}" class="btn btn-sm btn-info" title="عرض"><i class="fas fa-eye"></i></a>
+                                        <a href="{{ route('admin.instructors.edit', $instructor) }}" class="btn btn-sm btn-primary" title="تعديل"><i class="fas fa-edit"></i></a>
+                                        <form action="{{ route('admin.instructors.destroy', $instructor) }}" method="POST" class="d-inline" onsubmit="return confirm('هل أنت متأكد من رغبتك في حذف هذا المدرس؟');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn btn-sm btn-danger" title="حذف"><i class="fas fa-trash"></i></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-3">
+                        {{ $instructors->appends(request()->query())->links() }}
+                    </div>
+                @endif
+            </div>
+        </div>
+    </div>
+    @endsection
+    ```
+
+2.  **`resources/views/admin/instructors/create.blade.php`**
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'إضافة مدرس جديد')
+
+    @section('content')
+    <div class="container-fluid">
+        <h1><i class="fas fa-user-plus me-2"></i>إضافة مدرس جديد</h1>
+
+        <div class="card mt-3">
+            <div class="card-body">
+                <form action="{{ route('admin.instructors.store') }}" method="POST" enctype="multipart/form-data"> {{-- مهم لرفع الملفات --}}
+                    @csrf
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="name_ar" class="form-label">الاسم (عربي) <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control @error('name_ar') is-invalid @enderror" id="name_ar" name="name_ar" value="{{ old('name_ar') }}" required>
+                            @error('name_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="name_en" class="form-label">الاسم (إنجليزي)</label>
+                            <input type="text" class="form-control @error('name_en') is-invalid @enderror" id="name_en" name="name_en" value="{{ old('name_en') }}">
+                            @error('name_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="email" class="form-label">البريد الإلكتروني</label>
+                            <input type="email" class="form-control @error('email') is-invalid @enderror" id="email" name="email" value="{{ old('email') }}">
+                            @error('email') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="title" class="form-label">اللقب العلمي/المهني</label>
+                            <input type="text" class="form-control @error('title') is-invalid @enderror" id="title" name="title" value="{{ old('title') }}">
+                            @error('title') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="faculty_id" class="form-label">الكلية (اختياري)</label>
+                        <select class="form-select @error('faculty_id') is-invalid @enderror" id="faculty_id" name="faculty_id">
+                            <option value="">-- اختر الكلية --</option>
+                            @foreach($faculties as $faculty)
+                                <option value="{{ $faculty->id }}" {{ old('faculty_id') == $faculty->id ? 'selected' : '' }}>
+                                    {{ $faculty->name_ar }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('faculty_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="office_location" class="form-label">موقع المكتب</label>
+                        <input type="text" class="form-control @error('office_location') is-invalid @enderror" id="office_location" name="office_location" value="{{ old('office_location') }}">
+                        @error('office_location') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="bio" class="form-label">نبذة تعريفية</label>
+                        <textarea class="form-control @error('bio') is-invalid @enderror" id="bio" name="bio" rows="3">{{ old('bio') }}</textarea>
+                        @error('bio') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="profile_picture" class="form-label">الصورة الشخصية (اختياري)</label>
+                        <input type="file" class="form-control @error('profile_picture') is-invalid @enderror" id="profile_picture" name="profile_picture">
+                        @error('profile_picture') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="is_active" class="form-label">الحالة <span class="text-danger">*</span></label>
+                        <select class="form-select @error('is_active') is-invalid @enderror" id="is_active" name="is_active" required>
+                            <option value="1" {{ old('is_active', '1') == '1' ? 'selected' : '' }}>نشط</option>
+                            <option value="0" {{ old('is_active') == '0' ? 'selected' : '' }}>غير نشط</option>
+                        </select>
+                        @error('is_active') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> حفظ المدرس</button>
+                        <a href="{{ route('admin.instructors.index') }}" class="btn btn-secondary">إلغاء</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    @endsection
+    ```
+
+3.  **`resources/views/admin/instructors/edit.blade.php`**
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'تعديل بيانات المدرس: ' . $instructor->name_ar)
+
+    @section('content')
+    <div class="container-fluid">
+        <h1><i class="fas fa-user-edit me-2"></i>تعديل بيانات المدرس: {{ $instructor->name_ar }}</h1>
+
+        <div class="card mt-3">
+            <div class="card-body">
+                <form action="{{ route('admin.instructors.update', $instructor) }}" method="POST" enctype="multipart/form-data">
+                    @csrf
+                    @method('PUT')
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="name_ar" class="form-label">الاسم (عربي) <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control @error('name_ar') is-invalid @enderror" id="name_ar" name="name_ar" value="{{ old('name_ar', $instructor->name_ar) }}" required>
+                            @error('name_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="name_en" class="form-label">الاسم (إنجليزي)</label>
+                            <input type="text" class="form-control @error('name_en') is-invalid @enderror" id="name_en" name="name_en" value="{{ old('name_en', $instructor->name_en) }}">
+                            @error('name_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="email" class="form-label">البريد الإلكتروني</label>
+                            <input type="email" class="form-control @error('email') is-invalid @enderror" id="email" name="email" value="{{ old('email', $instructor->email) }}">
+                            @error('email') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="title" class="form-label">اللقب العلمي/المهني</label>
+                            <input type="text" class="form-control @error('title') is-invalid @enderror" id="title" name="title" value="{{ old('title', $instructor->title) }}">
+                            @error('title') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="faculty_id" class="form-label">الكلية (اختياري)</label>
+                        <select class="form-select @error('faculty_id') is-invalid @enderror" id="faculty_id" name="faculty_id">
+                            <option value="">-- اختر الكلية --</option>
+                            @foreach($faculties as $faculty)
+                                <option value="{{ $faculty->id }}" {{ old('faculty_id', $instructor->faculty_id) == $faculty->id ? 'selected' : '' }}>
+                                    {{ $faculty->name_ar }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('faculty_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="office_location" class="form-label">موقع المكتب</label>
+                        <input type="text" class="form-control @error('office_location') is-invalid @enderror" id="office_location" name="office_location" value="{{ old('office_location', $instructor->office_location) }}">
+                        @error('office_location') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="bio" class="form-label">نبذة تعريفية</label>
+                        <textarea class="form-control @error('bio') is-invalid @enderror" id="bio" name="bio" rows="3">{{ old('bio', $instructor->bio) }}</textarea>
+                        @error('bio') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="profile_picture" class="form-label">الصورة الشخصية (اختياري)</label>
+                        <input type="file" class="form-control @error('profile_picture') is-invalid @enderror" id="profile_picture" name="profile_picture">
+                        @error('profile_picture') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        @if($instructor->profile_picture_url)
+                            <div class="mt-2">
+                                <img src="{{ Storage::url($instructor->profile_picture_url) }}" alt="الصورة الحالية" style="width: 100px; height: 100px; object-fit: cover;">
+                                <div class="form-check mt-1">
+                                    <input class="form-check-input" type="checkbox" name="remove_profile_picture" id="remove_profile_picture" value="1">
+                                    <label class="form-check-label" for="remove_profile_picture">
+                                        إزالة الصورة الحالية (إذا تم رفع صورة جديدة، سيتم استبدالها تلقائياً)
+                                    </label>
+                                </div>
+                            </div>
+                        @endif
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="is_active" class="form-label">الحالة <span class="text-danger">*</span></label>
+                        <select class="form-select @error('is_active') is-invalid @enderror" id="is_active" name="is_active" required>
+                            <option value="1" {{ old('is_active', $instructor->is_active) == '1' ? 'selected' : '' }}>نشط</option>
+                            <option value="0" {{ old('is_active', $instructor->is_active) == '0' ? 'selected' : '' }}>غير نشط</option>
+                        </select>
+                        @error('is_active') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> تحديث البيانات</button>
+                        <a href="{{ route('admin.instructors.index') }}" class="btn btn-secondary">إلغاء</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    @endsection
+    ```
+
+4.  **`resources/views/admin/instructors/show.blade.php`**
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'تفاصيل المدرس: ' . $instructor->name_ar)
+
+    @section('content')
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1><i class="fas fa-user-tie me-2"></i>تفاصيل المدرس: {{ $instructor->name_ar }}</h1>
+            <div>
+                <a href="{{ route('admin.instructors.edit', $instructor) }}" class="btn btn-primary"><i class="fas fa-edit me-1"></i> تعديل</a>
+                <a href="{{ route('admin.instructors.index') }}" class="btn btn-secondary">العودة إلى القائمة</a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="row g-0">
+                <div class="col-md-3 text-center p-3 border-end">
+                    @if($instructor->profile_picture_url)
+                        <img src="{{ Storage::url($instructor->profile_picture_url) }}" alt="{{ $instructor->name_ar }}" class="img-fluid rounded-circle mb-2" style="width: 150px; height: 150px; object-fit: cover;">
+                    @else
+                        <i class="fas fa-user-tie fa-5x text-secondary mb-2"></i>
+                    @endif
+                    <h5 class="card-title">{{ $instructor->name_ar }}</h5>
+                    <p class="card-text"><small class="text-muted">{{ $instructor->title ?: 'مدرس' }}</small></p>
+                    @if($instructor->is_active)
+                        <span class="badge bg-success">نشط</span>
+                    @else
+                        <span class="badge bg-danger">غير نشط</span>
+                    @endif
+                </div>
+                <div class="col-md-9">
+                    <div class="card-body">
+                        <h5 class="card-title mb-3">معلومات المدرس</h5>
+                        <div class="row">
+                            <div class="col-sm-6">
+                                <p><strong>الاسم (عربي):</strong> {{ $instructor->name_ar }}</p>
+                                <p><strong>البريد الإلكتروني:</strong> {{ $instructor->email ?: '-' }}</p>
+                                <p><strong>الكلية:</strong> {{ $instructor->faculty->name_ar ?? 'غير محدد' }}</p>
+                            </div>
+                            <div class="col-sm-6">
+                                <p><strong>الاسم (إنجليزي):</strong> {{ $instructor->name_en ?: '-' }}</p>
+                                <p><strong>موقع المكتب:</strong> {{ $instructor->office_location ?: '-' }}</p>
+                                <p><strong>تاريخ الإضافة:</strong> {{ $instructor->created_at->translatedFormat('Y-m-d') }}</p>
+                            </div>
+                        </div>
+                        @if($instructor->bio)
+                        <hr>
+                        <h6>نبذة تعريفية:</h6>
+                        <p>{{ $instructor->bio }}</p>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h4><i class="fas fa-book me-2"></i>المقررات التي يدرسها/يدرسها حالياً (مثال)</h4>
+            </div>
+            <div class="card-body">
+                @if($instructor->courseAssignments->isEmpty())
+                    <p class="text-muted">لا توجد مقررات معينة لهذا المدرس حالياً.</p>
+                @else
+                    <ul class="list-group">
+                        @foreach($instructor->courseAssignments as $assignment)
+                            <li class="list-group-item">
+                                <a href="{{ route('admin.courses.show', $assignment->course_id) }}">{{ $assignment->course->name_ar ?? 'مقرر محذوف' }}</a>
+                                ({{ $assignment->semester_of_assignment }} - {{ $assignment->role_in_course }})
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+                {{-- يمكنك إضافة زر لتعيين المدرس لمقرر جديد من هنا --}}
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h4><i class="fas fa-graduation-cap me-2"></i>مشاريع التخرج التي يشرف عليها ({{ $instructor->supervisedProjects->count() }})</h4>
+            </div>
+            <div class="card-body">
+                 @if($instructor->supervisedProjects->isEmpty())
+                    <p class="text-muted">لا يوجد مشاريع يشرف عليها هذا المدرس حالياً.</p>
+                @else
+                    <ul class="list-group">
+                        @foreach($instructor->supervisedProjects as $project)
+                            <li class="list-group-item">
+                                <a href="{{ route('admin.projects.show', $project) }}">{{ $project->title_ar }}</a> ({{ $project->year }})
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+            </div>
+        </div>
+    </div>
+    @endsection
+    ```
+
+بهذا تكون قد حصلت على ملفات الـ Form Requests والـ Views الأساسية لإدارة المدرسين. تذكر أن هذا تصميم أولي ويمكنك تحسينه وتوسيعه حسب الحاجة.
+
+
+---
+
+
+فهمت قصدك تمامًا الآن. بما أنك **لا تريد ربط المدرسين بالمقررات بشكل مباشر** في هذا السياق (أي لا توجد علاقة `courseAssignments` في نموذج `Instructor`)، فالتعديلات ستكون كالتالي:
+
+**1. تعديل متحكم `InstructorController` (دالة `show` و `destroy`):**
+
+*   **في دالة `show`:** يجب إزالة `courseAssignments.course` من `load()` لأن العلاقة غير موجودة.
+*   **في دالة `destroy`:** يجب إزالة التحقق من `|| $instructor->courseAssignments()->exists()` لأن العلاقة غير موجودة.
+
+**`app/Http/Controllers/Admin/InstructorController.php` (المعدل):**
+
+```php
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\Instructor;
+use App\Models\Faculty;
+use App\Http\Requests\Admin\StoreInstructorRequest;
+use App\Http\Requests\Admin\UpdateInstructorRequest;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+
+class InstructorController extends Controller
+{
+    public function __construct()
+    {
+        $this->middleware('auth:admin_web');
+    }
+
+    public function index(Request $request)
+    {
+        $query = Instructor::with('faculty')->latest();
+         if ($request->filled('faculty_id')) {
+            $query->where('faculty_id', $request->faculty_id);
+        }
+        $instructors = $query->paginate(15);
+        $faculties = Faculty::orderBy('name_ar')->get(['id', 'name_ar']);
+        return view('admin.instructors.index', compact('instructors', 'faculties'));
+    }
+
+    public function create()
+    {
+        $faculties = Faculty::orderBy('name_ar')->get(['id', 'name_ar']);
+        return view('admin.instructors.create', compact('faculties'));
+    }
+
+    public function store(StoreInstructorRequest $request)
+    {
+        $validatedData = $request->validated();
+
+        if ($request->hasFile('profile_picture')) {
+            $path = $request->file('profile_picture')->store('instructors', 'public');
+            $validatedData['profile_picture_url'] = $path;
+        } else {
+             $validatedData['profile_picture_url'] = null;
+        }
+
+        Instructor::create($validatedData);
+        return redirect()->route('admin.instructors.index')
+                         ->with('success', 'تم إضافة المدرس بنجاح.');
+    }
+
+    public function show(Instructor $instructor)
+    {
+        // تم إزالة 'courseAssignments.course' من هنا
+        $instructor->load(['faculty', 'supervisedProjects']);
+        return view('admin.instructors.show', compact('instructor'));
+    }
+
+    public function edit(Instructor $instructor)
+    {
+        $faculties = Faculty::orderBy('name_ar')->get(['id', 'name_ar']);
+        return view('admin.instructors.edit', compact('instructor', 'faculties'));
+    }
+
+    public function update(UpdateInstructorRequest $request, Instructor $instructor)
+    {
+        $validatedData = $request->validated();
+
+        if ($request->hasFile('profile_picture')) {
+            if ($instructor->profile_picture_url) {
+                Storage::disk('public')->delete($instructor->profile_picture_url);
+            }
+            $path = $request->file('profile_picture')->store('instructors', 'public');
+            $validatedData['profile_picture_url'] = $path;
+        } elseif ($request->boolean('remove_profile_picture') && $instructor->profile_picture_url) { // تعديل هنا لإزالة الصورة فقط إذا تم تحديد الخيار
+            Storage::disk('public')->delete($instructor->profile_picture_url);
+            $validatedData['profile_picture_url'] = null;
+        }
+
+
+        $instructor->update($validatedData);
+        return redirect()->route('admin.instructors.index')
+                         ->with('success', 'تم تحديث بيانات المدرس بنجاح.');
+    }
+
+    public function destroy(Instructor $instructor)
+    {
+        // تم إزالة التحقق من 'courseAssignments'
+        if ($instructor->deanOfFaculty()->exists() || $instructor->supervisedProjects()->exists()) {
+             return redirect()->route('admin.instructors.index')
+                              ->with('error', 'لا يمكن حذف المدرس لوجود ارتباطات (عميد، مشرف مشاريع).');
+        }
+
+        try {
+            if ($instructor->profile_picture_url) {
+                Storage::disk('public')->delete($instructor->profile_picture_url);
+            }
+            $instructor->delete();
+            return redirect()->route('admin.instructors.index')
+                             ->with('success', 'تم حذف المدرس بنجاح.');
+        } catch (\Illuminate\Database\QueryException $e) {
+            return redirect()->route('admin.instructors.index')
+                             ->with('error', 'حدث خطأ أثناء الحذف: ' . $e->getMessage()); // إضافة رسالة الخطأ من الاستثناء
+        }
+    }
+}
+```
+
+**2. تعديل ملف `resources/views/admin/instructors/show.blade.php`:**
+
+بما أنه لا توجد علاقة `courseAssignments`، يجب إزالة القسم الخاص بعرض المقررات التي يدرسها المدرس أو تعديله ليعكس الواقع.
+
+**`resources/views/admin/instructors/show.blade.php` (المعدل):**
+
+```html
+@extends('admin.layouts.app')
+
+@section('title', 'تفاصيل المدرس: ' . $instructor->name_ar)
+
+@section('content')
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1><i class="fas fa-user-tie me-2"></i>تفاصيل المدرس: {{ $instructor->name_ar }}</h1>
+        <div>
+            <a href="{{ route('admin.instructors.edit', $instructor) }}" class="btn btn-primary"><i class="fas fa-edit me-1"></i> تعديل</a>
+            <a href="{{ route('admin.instructors.index') }}" class="btn btn-secondary">العودة إلى القائمة</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="row g-0">
+            <div class="col-md-3 text-center p-3 border-end">
+                @if($instructor->profile_picture_url)
+                    <img src="{{ Storage::url($instructor->profile_picture_url) }}" alt="{{ $instructor->name_ar }}" class="img-fluid rounded-circle mb-2" style="width: 150px; height: 150px; object-fit: cover;">
+                @else
+                    <i class="fas fa-user-tie fa-5x text-secondary mb-2"></i>
+                @endif
+                <h5 class="card-title">{{ $instructor->name_ar }}</h5>
+                <p class="card-text"><small class="text-muted">{{ $instructor->title ?: 'مدرس' }}</small></p>
+                @if($instructor->is_active)
+                    <span class="badge bg-success">نشط</span>
+                @else
+                    <span class="badge bg-danger">غير نشط</span>
+                @endif
+            </div>
+            <div class="col-md-9">
+                <div class="card-body">
+                    <h5 class="card-title mb-3">معلومات المدرس</h5>
+                    <div class="row">
+                        <div class="col-sm-6">
+                            <p><strong>الاسم (عربي):</strong> {{ $instructor->name_ar }}</p>
+                            <p><strong>البريد الإلكتروني:</strong> {{ $instructor->email ?: '-' }}</p>
+                            <p><strong>الكلية:</strong> {{ $instructor->faculty->name_ar ?? 'غير محدد' }}</p>
+                        </div>
+                        <div class="col-sm-6">
+                            <p><strong>الاسم (إنجليزي):</strong> {{ $instructor->name_en ?: '-' }}</p>
+                            <p><strong>موقع المكتب:</strong> {{ $instructor->office_location ?: '-' }}</p>
+                            <p><strong>تاريخ الإضافة:</strong> {{ $instructor->created_at->translatedFormat('Y-m-d') }}</p>
+                        </div>
+                    </div>
+                    @if($instructor->bio)
+                    <hr>
+                    <h6>نبذة تعريفية:</h6>
+                    <p>{{ $instructor->bio }}</p>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- تم إزالة أو تعديل هذا القسم --}}
+    {{-- إذا كنت لا تريد عرض المقررات نهائياً، احذف هذا القسم بالكامل --}}
+    {{-- إذا كنت تريد الإشارة إلى عدم وجود ربط مباشر، يمكنك تعديل النص --}}
+    <div class="card mt-4">
+        <div class="card-header">
+            <h4><i class="fas fa-book me-2"></i>المقررات</h4>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">لا يتم ربط المدرسين بالمقررات بشكل مباشر في هذا النظام حالياً من خلال ملف المدرس الشخصي.</p>
+            {{-- أو يمكنك عرض قائمة بجميع المقررات التي قد يكون لها صلة بالكلية التي ينتمي إليها المدرس، إذا كان ذلك منطقيًا --}}
+            {{-- <p class="text-muted">لعرض المقررات، يرجى الذهاب إلى قسم إدارة المقررات.</p> --}}
+        </div>
+    </div>
+
+    <div class="card mt-4">
+        <div class="card-header">
+            <h4><i class="fas fa-graduation-cap me-2"></i>مشاريع التخرج التي يشرف عليها ({{ $instructor->supervisedProjects->count() }})</h4>
+        </div>
+        <div class="card-body">
+             @if($instructor->supervisedProjects->isEmpty())
+                <p class="text-muted">لا يوجد مشاريع يشرف عليها هذا المدرس حالياً.</p>
+            @else
+                <ul class="list-group">
+                    @foreach($instructor->supervisedProjects as $project)
+                        <li class="list-group-item">
+                            <a href="{{ route('admin.projects.show', $project) }}">{{ $project->title_ar }}</a> ({{ $project->year }})
+                        </li>
+                    @endforeach
+                </ul>
+            @endif
+        </div>
+    </div>
+</div>
+@endsection
+```
+
+**شرح التعديلات:**
+
+*   **في `InstructorController`:**
+    *   **`show()`:** تم إزالة `'courseAssignments.course'` من مصفوفة `load()`.
+    *   **`destroy()`:** تم إزالة `|| $instructor->courseAssignments()->exists()` من شرط التحقق قبل الحذف. وأضفت رسالة الخطأ من الاستثناء `QueryException` لتكون أوضح عند فشل الحذف لأسباب أخرى.
+    *   في دالة `update()`, أضفت شرطًا للتحقق من `remove_profile_picture` لضمان حذف الصورة فقط إذا تم تحديد هذا الخيار ولم يتم رفع صورة جديدة.
+
+*   **في `show.blade.php`:**
+    *   تم تعديل القسم الخاص بـ "المقررات التي يدرسها". بدلاً من محاولة عرض `$instructor->courseAssignments` (التي لم تعد موجودة)، تم وضع رسالة توضيحية. يمكنك تعديل هذه الرسالة أو إزالة القسم بالكامل إذا كنت لا تريد أي إشارة للمقررات في صفحة تفاصيل المدرس.
+
+بهذه التعديلات، يجب أن يعمل عرض تفاصيل المدرس وحذفه بشكل صحيح دون محاولة الوصول إلى علاقة `courseAssignments` غير المعرفة.
+
+
+
+---
+
+

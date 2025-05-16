@@ -39,13 +39,11 @@ class InstructorController extends Controller
         $validatedData = $request->validated();
 
         if ($request->hasFile('profile_picture')) {
-            // Store the image in 'public/instructors' directory
             $path = $request->file('profile_picture')->store('instructors', 'public');
             $validatedData['profile_picture_url'] = $path;
         } else {
-             $validatedData['profile_picture_url'] = null; // Ensure it's null if no file
+             $validatedData['profile_picture_url'] = null;
         }
-
 
         Instructor::create($validatedData);
         return redirect()->route('admin.instructors.index')
@@ -54,7 +52,8 @@ class InstructorController extends Controller
 
     public function show(Instructor $instructor)
     {
-        $instructor->load(['faculty', 'supervisedProjects', 'courseAssignments.course']);
+        // تم إزالة 'courseAssignments.course' من هنا
+        $instructor->load(['faculty', 'supervisedProjects']);
         return view('admin.instructors.show', compact('instructor'));
     }
 
@@ -69,16 +68,16 @@ class InstructorController extends Controller
         $validatedData = $request->validated();
 
         if ($request->hasFile('profile_picture')) {
-            // Delete old image if it exists
             if ($instructor->profile_picture_url) {
                 Storage::disk('public')->delete($instructor->profile_picture_url);
             }
-            // Store the new image
             $path = $request->file('profile_picture')->store('instructors', 'public');
             $validatedData['profile_picture_url'] = $path;
+        } elseif ($request->boolean('remove_profile_picture') && $instructor->profile_picture_url) { // تعديل هنا لإزالة الصورة فقط إذا تم تحديد الخيار
+            Storage::disk('public')->delete($instructor->profile_picture_url);
+            $validatedData['profile_picture_url'] = null;
         }
-        // If no new image, keep the old one (don't set to null unless intended)
-        // To remove image without uploading new one, you'd need separate logic/checkbox
+
 
         $instructor->update($validatedData);
         return redirect()->route('admin.instructors.index')
@@ -87,14 +86,13 @@ class InstructorController extends Controller
 
     public function destroy(Instructor $instructor)
     {
-        // Check for relationships (Dean, Supervisor, Course Assignments)
-        if ($instructor->deanOfFaculty()->exists() || $instructor->supervisedProjects()->exists() || $instructor->courseAssignments()->exists()) {
+        // تم إزالة التحقق من 'courseAssignments'
+        if ($instructor->deanOfFaculty()->exists() || $instructor->supervisedProjects()->exists()) {
              return redirect()->route('admin.instructors.index')
-                              ->with('error', 'لا يمكن حذف المدرس لوجود ارتباطات (عميد، مشرف، مقررات).');
+                              ->with('error', 'لا يمكن حذف المدرس لوجود ارتباطات (عميد، مشرف مشاريع).');
         }
 
         try {
-             // Delete profile picture from storage if it exists
             if ($instructor->profile_picture_url) {
                 Storage::disk('public')->delete($instructor->profile_picture_url);
             }
@@ -103,7 +101,7 @@ class InstructorController extends Controller
                              ->with('success', 'تم حذف المدرس بنجاح.');
         } catch (\Illuminate\Database\QueryException $e) {
             return redirect()->route('admin.instructors.index')
-                             ->with('error', 'حدث خطأ أثناء الحذف.');
+                             ->with('error', 'حدث خطأ أثناء الحذف: ' . $e->getMessage()); // إضافة رسالة الخطأ من الاستثناء
         }
     }
 }
