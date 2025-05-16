@@ -5455,8 +5455,998 @@ class NotificationResource extends JsonResource {
 ---
 بهذا نكون قد غطينا إنشاء النماذج المفقودة، ومحتوى جميع متحكمات لوحة التحكم، وملفات Form Requests المقابلة، وملفات API Resources الأساسية. تذكر أن هذا الكود هو نقطة بداية ويتطلب ملء الـ Views وتكييف المنطق حسب الحاجة.
 
+---
+بالتأكيد، سأقوم بملء متحكمات لوحة التحكم التي أرسلتها (AdminUserController, EventController, ProjectController, StudentController, UniversityFacilityController) ثم سأقوم بتصميم ملفات الـ API Resource Collections و Form Requests المحددة.
+
+---
+
+**1. ملء متحكمات لوحة التحكم (`app/Http/Controllers/Admin`)**
+
+**`app/Http/Controllers/Admin/AdminUserController.php`**
+
+```php
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\AdminUser;
+use App\Http\Requests\Admin\StoreAdminUserRequest; // ستحتاج لإنشاء هذا
+use App\Http\Requests\Admin\UpdateAdminUserRequest; // ستحتاج لإنشاء هذا
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Auth;
+
+class AdminUserController extends Controller
+{
+    public function __construct()
+    {
+        $this->middleware('auth:admin_web');
+        // تقييد الوصول إلى هذه الوظائف فقط للمدير العام (superadmin)
+        $this->middleware(function ($request, $next) {
+            if (Auth::guard('admin_web')->user()->role !== 'superadmin') {
+                // يمكنك توجيههم إلى صفحة 403 أو صفحة أخرى
+                return redirect()->route('admin.dashboard')->with('error', 'ليس لديك الصلاحية للوصول لهذه الصفحة.');
+            }
+            return $next($request);
+        })->except(['index']); // يمكن لجميع المديرين عرض القائمة ربما
+    }
+
+    /**
+     * Display a listing of the resource.
+     */
+    public function index()
+    {
+        $adminUsers = AdminUser::latest()->paginate(15);
+        return view('admin.admin_users.index', compact('adminUsers'));
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     */
+    public function create()
+    {
+        // يمكنك تمرير قائمة بالأدوار (roles) إذا كانت ديناميكية
+        $roles = ['admin', 'content_manager', 'superadmin']; // مثال
+        return view('admin.admin_users.create', compact('roles'));
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     */
+    public function store(StoreAdminUserRequest $request)
+    {
+        $validatedData = $request->validated();
+        // لا حاجة لتشفير password_hash هنا، النموذج AdminUser يعتني بذلك عبر mutator أو cast
+        // $validatedData['password_hash'] = Hash::make($validatedData['password']);
+
+        AdminUser::create($validatedData);
+
+        return redirect()->route('admin.admin-users.index')
+                         ->with('success', 'تم إنشاء مستخدم المدير بنجاح.');
+    }
+
+    /**
+     * Display the specified resource.
+     * عادةً لا نحتاج لدالة show لمستخدمي الإدارة، لكن يمكن تركها فارغة أو توجيهها.
+     */
+    public function show(AdminUser $adminUser) // استخدام Route Model Binding
+    {
+         return view('admin.admin_users.show', compact('adminUser'));
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     */
+    public function edit(AdminUser $adminUser) // استخدام Route Model Binding
+    {
+        if (Auth::guard('admin_web')->id() === $adminUser->id && $adminUser->role === 'superadmin' && AdminUser::where('role', 'superadmin')->count() <= 1) {
+             return redirect()->route('admin.admin-users.index')->with('error', 'لا يمكن تعديل آخر مدير عام.');
+        }
+        $roles = ['admin', 'content_manager', 'superadmin'];
+        return view('admin.admin_users.edit', compact('adminUser', 'roles'));
+    }
+
+    /**
+     * Update the specified resource in storage.
+     */
+    public function update(UpdateAdminUserRequest $request, AdminUser $adminUser)
+    {
+        $validatedData = $request->validated();
+
+        // إذا تم إدخال كلمة مرور جديدة، قم بتحديثها
+        if (!empty($validatedData['password'])) {
+            // النموذج سيعتني بالتشفير
+            $adminUser->password_hash = $validatedData['password'];
+        } else {
+            // إذا لم يتم إدخال كلمة مرور جديدة، لا تقم بتغيير الحالية
+            unset($validatedData['password']);
+        }
+
+        // منع تغيير دور آخر مدير عام
+        if ($adminUser->role === 'superadmin' && $validatedData['role'] !== 'superadmin' && AdminUser::where('role', 'superadmin')->count() <= 1 && Auth::guard('admin_web')->id() === $adminUser->id) {
+            return redirect()->back()->withInput()->with('error', 'لا يمكن تغيير دور آخر مدير عام.');
+        }
 
 
+        $adminUser->update($validatedData);
+
+        return redirect()->route('admin.admin-users.index')
+                         ->with('success', 'تم تحديث بيانات مستخدم المدير بنجاح.');
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     */
+    public function destroy(AdminUser $adminUser)
+    {
+        // منع حذف المدير الحالي أو آخر مدير عام
+        if (Auth::guard('admin_web')->id() === $adminUser->id) {
+            return redirect()->route('admin.admin-users.index')
+                             ->with('error', 'لا يمكنك حذف حسابك الخاص.');
+        }
+        if ($adminUser->role === 'superadmin' && AdminUser::where('role', 'superadmin')->count() <= 1) {
+             return redirect()->route('admin.admin-users.index')
+                             ->with('error', 'لا يمكن حذف آخر مدير عام في النظام.');
+        }
+
+        try {
+            $adminUser->delete();
+            return redirect()->route('admin.admin-users.index')
+                             ->with('success', 'تم حذف مستخدم المدير بنجاح.');
+        } catch (\Exception $e) {
+            return redirect()->route('admin.admin-users.index')
+                             ->with('error', 'حدث خطأ أثناء الحذف.');
+        }
+    }
+}
+```
+
+**`app/Http/Controllers/Admin/EventController.php`**
+
+```php
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\Event;
+use App\Models\Faculty;
+use App\Http\Requests\Admin\StoreEventRequest; // ستحتاج لإنشاء هذا
+use App\Http\Requests\Admin\UpdateEventRequest; // ستحتاج لإنشاء هذا
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
+
+class EventController extends Controller
+{
+    public function __construct()
+    {
+        $this->middleware('auth:admin_web');
+    }
+
+    public function index(Request $request)
+    {
+        $query = Event::with(['organizingFaculty', 'createdByAdmin'])->latest();
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+        if ($request->filled('faculty_id')) {
+            $query->where('organizing_faculty_id', $request->faculty_id);
+        }
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('title_ar', 'like', "%{$search}%")
+                  ->orWhere('title_en', 'like', "%{$search}%")
+                  ->orWhere('description_ar', 'like', "%{$search}%");
+            });
+        }
+
+        $events = $query->paginate(15);
+        $faculties = Faculty::orderBy('name_ar')->get(['id', 'name_ar']); // للفلترة
+        $statuses = ['scheduled' => 'مجدولة', 'ongoing' => 'جارية', 'completed' => 'مكتملة', 'cancelled' => 'ملغاة', 'draft' => 'مسودة'];
+
+        return view('admin.events.index', compact('events', 'faculties', 'statuses'));
+    }
+
+    public function create()
+    {
+        $faculties = Faculty::orderBy('name_ar')->get(['id', 'name_ar']);
+        $statuses = ['scheduled' => 'مجدولة', 'ongoing' => 'جارية', 'completed' => 'مكتملة', 'cancelled' => 'ملغاة', 'draft' => 'مسودة'];
+        return view('admin.events.create', compact('faculties', 'statuses'));
+    }
+
+    public function store(StoreEventRequest $request)
+    {
+        $validatedData = $request->validated();
+        $validatedData['created_by_admin_id'] = Auth::guard('admin_web')->id();
+        $validatedData['last_updated_by_admin_id'] = Auth::guard('admin_web')->id();
+
+        if ($request->hasFile('main_image')) { // افترض أن اسم الحقل في النموذج هو main_image
+            $path = $request->file('main_image')->store('events', 'public');
+            $validatedData['main_image_url'] = $path;
+        }
+
+        Event::create($validatedData);
+
+        return redirect()->route('admin.events.index')
+                         ->with('success', 'تم إنشاء الفعالية بنجاح.');
+    }
+
+    public function show(Event $event)
+    {
+        $event->load(['organizingFaculty', 'createdByAdmin', 'lastUpdatedByAdmin', 'registeredStudents.student']);
+        return view('admin.events.show', compact('event'));
+    }
+
+    public function edit(Event $event)
+    {
+        $faculties = Faculty::orderBy('name_ar')->get(['id', 'name_ar']);
+        $statuses = ['scheduled' => 'مجدولة', 'ongoing' => 'جارية', 'completed' => 'مكتملة', 'cancelled' => 'ملغاة', 'draft' => 'مسودة'];
+        return view('admin.events.edit', compact('event', 'faculties', 'statuses'));
+    }
+
+    public function update(UpdateEventRequest $request, Event $event)
+    {
+        $validatedData = $request->validated();
+        $validatedData['last_updated_by_admin_id'] = Auth::guard('admin_web')->id();
+
+        if ($request->hasFile('main_image')) {
+            if ($event->main_image_url) {
+                Storage::disk('public')->delete($event->main_image_url);
+            }
+            $path = $request->file('main_image')->store('events', 'public');
+            $validatedData['main_image_url'] = $path;
+        } elseif ($request->boolean('remove_main_image')) { // لإزالة الصورة الحالية
+            if ($event->main_image_url) {
+                Storage::disk('public')->delete($event->main_image_url);
+            }
+            $validatedData['main_image_url'] = null;
+        }
+
+
+        $event->update($validatedData);
+
+        return redirect()->route('admin.events.index')
+                         ->with('success', 'تم تحديث الفعالية بنجاح.');
+    }
+
+    public function destroy(Event $event)
+    {
+        if ($event->registeredStudents()->exists()) {
+            return redirect()->route('admin.events.index')
+                             ->with('error', 'لا يمكن حذف الفعالية لوجود طلاب مسجلين فيها.');
+        }
+        try {
+            if ($event->main_image_url) {
+                Storage::disk('public')->delete($event->main_image_url);
+            }
+            $event->delete();
+            return redirect()->route('admin.events.index')
+                             ->with('success', 'تم حذف الفعالية بنجاح.');
+        } catch (\Exception $e) {
+            return redirect()->route('admin.events.index')
+                             ->with('error', 'حدث خطأ أثناء الحذف.');
+        }
+    }
+}
+```
+
+**`app/Http/Controllers/Admin/ProjectController.php`**
+
+```php
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\Project; // اسم النموذج لمشاريع التخرج
+use App\Models\Specialization;
+use App\Models\Instructor;
+use App\Http\Requests\Admin\StoreProjectRequest; // ستحتاج لإنشاء هذا
+use App\Http\Requests\Admin\UpdateProjectRequest; // ستحتاج لإنشاء هذا
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+
+class ProjectController extends Controller
+{
+    public function __construct()
+    {
+        $this->middleware('auth:admin_web');
+    }
+
+    public function index(Request $request)
+    {
+        $query = Project::with(['specialization', 'supervisor'])->latest();
+
+        if ($request->filled('specialization_id')) {
+            $query->where('specialization_id', $request->specialization_id);
+        }
+        if ($request->filled('year')) {
+            $query->where('year', $request->year);
+        }
+        if ($request->filled('semester')) {
+            $query->where('semester', $request->semester);
+        }
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('title_ar', 'like', "%{$search}%")
+                  ->orWhere('title_en', 'like', "%{$search}%")
+                  ->orWhere('student_names', 'like', "%{$search}%")
+                  ->orWhere('keywords', 'like', "%{$search}%");
+            });
+        }
+
+        $projects = $query->paginate(15);
+        $specializations = Specialization::orderBy('name_ar')->get(['id', 'name_ar']);
+        $years = Project::distinct()->orderBy('year', 'desc')->pluck('year'); // لجلب السنوات المتاحة للفلترة
+        $semesters = ['الخريف', 'الربيع']; // أو جلبها من قاعدة البيانات إذا كانت ديناميكية
+
+        return view('admin.projects.index', compact('projects', 'specializations', 'years', 'semesters'));
+    }
+
+    public function create()
+    {
+        $specializations = Specialization::orderBy('name_ar')->get(['id', 'name_ar']);
+        $instructors = Instructor::where('is_active', true)->orderBy('name_ar')->get(['id', 'name_ar']);
+        $semesters = ['الخريف', 'الربيع'];
+        return view('admin.projects.create', compact('specializations', 'instructors', 'semesters'));
+    }
+
+    public function store(StoreProjectRequest $request)
+    {
+        $validatedData = $request->validated();
+        $validatedData['created_by_admin_id'] = Auth::guard('admin_web')->id();
+        $validatedData['last_updated_by_admin_id'] = Auth::guard('admin_web')->id();
+
+        Project::create($validatedData);
+
+        return redirect()->route('admin.projects.index')
+                         ->with('success', 'تم إضافة مشروع التخرج بنجاح.');
+    }
+
+    public function show(Project $project)
+    {
+        $project->load(['specialization', 'supervisor', 'createdByAdmin', 'lastUpdatedByAdmin']);
+        return view('admin.projects.show', compact('project'));
+    }
+
+    public function edit(Project $project)
+    {
+        $specializations = Specialization::orderBy('name_ar')->get(['id', 'name_ar']);
+        $instructors = Instructor::where('is_active', true)->orderBy('name_ar')->get(['id', 'name_ar']);
+        $semesters = ['الخريف', 'الربيع'];
+        return view('admin.projects.edit', compact('project', 'specializations', 'instructors', 'semesters'));
+    }
+
+    public function update(UpdateProjectRequest $request, Project $project)
+    {
+        $validatedData = $request->validated();
+        $validatedData['last_updated_by_admin_id'] = Auth::guard('admin_web')->id();
+
+        $project->update($validatedData);
+        return redirect()->route('admin.projects.index')
+                         ->with('success', 'تم تحديث مشروع التخرج بنجاح.');
+    }
+
+    public function destroy(Project $project)
+    {
+        try {
+            $project->delete();
+            return redirect()->route('admin.projects.index')
+                             ->with('success', 'تم حذف مشروع التخرج بنجاح.');
+        } catch (\Exception $e) {
+            return redirect()->route('admin.projects.index')
+                             ->with('error', 'حدث خطأ أثناء الحذف.');
+        }
+    }
+}
+```
+
+**`app/Http/Controllers/Admin/StudentController.php`**
+
+```php
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\Student;
+use App\Models\Specialization;
+use App\Http\Requests\Admin\StoreStudentRequest; // ستحتاج لإنشاء هذا
+use App\Http\Requests\Admin\UpdateStudentRequest; // ستحتاج لإنشاء هذا
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Auth;
+
+class StudentController extends Controller
+{
+    public function __construct()
+    {
+        $this->middleware('auth:admin_web');
+    }
+
+    public function index(Request $request)
+    {
+        $query = Student::with('specialization')->latest();
+
+        if ($request->filled('specialization_id')) {
+            $query->where('specialization_id', $request->specialization_id);
+        }
+        if ($request->filled('enrollment_year')) {
+            $query->where('enrollment_year', $request->enrollment_year);
+        }
+        if ($request->filled('is_active')) {
+            $query->where('is_active', $request->boolean('is_active'));
+        }
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('full_name_ar', 'like', "%{$search}%")
+                  ->orWhere('full_name_en', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('student_university_id', 'like', "%{$search}%");
+            });
+        }
+
+        $students = $query->paginate(15);
+        $specializations = Specialization::orderBy('name_ar')->get(['id', 'name_ar']);
+        $enrollmentYears = Student::distinct()->orderBy('enrollment_year', 'desc')->pluck('enrollment_year');
+
+        return view('admin.students.index', compact('students', 'specializations', 'enrollmentYears'));
+    }
+
+    public function create()
+    {
+        $specializations = Specialization::orderBy('name_ar')->get(['id', 'name_ar']);
+        return view('admin.students.create', compact('specializations'));
+    }
+
+    public function store(StoreStudentRequest $request)
+    {
+        $validatedData = $request->validated();
+
+        if (!empty($validatedData['password'])) { // إذا تم إدخال كلمة مرور
+            $validatedData['password_hash'] = Hash::make($validatedData['password']);
+        }
+        unset($validatedData['password']); // إزالة كلمة المرور من البيانات قبل الإنشاء إذا كانت فارغة
+
+        if ($request->hasFile('profile_picture')) {
+            $path = $request->file('profile_picture')->store('students_profiles', 'public');
+            $validatedData['profile_picture_url'] = $path;
+        }
+
+        $validatedData['admin_action_by_id'] = Auth::guard('admin_web')->id();
+        $validatedData['admin_action_at'] = now();
+
+        Student::create($validatedData);
+
+        return redirect()->route('admin.students.index')
+                         ->with('success', 'تم إضافة الطالب بنجاح.');
+    }
+
+    public function show(Student $student)
+    {
+        $student->load(['specialization', 'adminActionBy', 'courseEnrollments.course', 'eventRegistrations.event']);
+        return view('admin.students.show', compact('student'));
+    }
+
+    public function edit(Student $student)
+    {
+        $specializations = Specialization::orderBy('name_ar')->get(['id', 'name_ar']);
+        return view('admin.students.edit', compact('student', 'specializations'));
+    }
+
+    public function update(UpdateStudentRequest $request, Student $student)
+    {
+        $validatedData = $request->validated();
+
+        if (!empty($validatedData['password'])) {
+            $student->password_hash = Hash::make($validatedData['password']);
+        }
+        // لا نزيل كلمة المرور هنا، النموذج سيتجاهل التحديث إذا كان الحقل فارغًا ولم يكن في fillable
+
+        if ($request->hasFile('profile_picture')) {
+            if ($student->profile_picture_url) {
+                Storage::disk('public')->delete($student->profile_picture_url);
+            }
+            $path = $request->file('profile_picture')->store('students_profiles', 'public');
+            $validatedData['profile_picture_url'] = $path;
+        } elseif ($request->boolean('remove_profile_picture')) {
+            if ($student->profile_picture_url) {
+                Storage::disk('public')->delete($student->profile_picture_url);
+            }
+            $validatedData['profile_picture_url'] = null;
+        }
+
+
+        $validatedData['admin_action_by_id'] = Auth::guard('admin_web')->id();
+        $validatedData['admin_action_at'] = now();
+        // إزالة كلمة المرور من مصفوفة التحديث إذا كانت فارغة لتجنب مسح كلمة المرور الحالية
+        if (empty($validatedData['password'])) {
+            unset($validatedData['password']);
+        }
+
+
+        $student->update($validatedData);
+
+        return redirect()->route('admin.students.index')
+                         ->with('success', 'تم تحديث بيانات الطالب بنجاح.');
+    }
+
+    public function destroy(Student $student)
+    {
+        // تحقق من عدم وجود تسجيلات في مقررات أو فعاليات
+        if ($student->courseEnrollments()->exists() || $student->eventRegistrations()->exists()) {
+            return redirect()->route('admin.students.index')
+                             ->with('error', 'لا يمكن حذف الطالب لوجود تسجيلات مرتبطة به في مقررات أو فعاليات.');
+        }
+        try {
+            if ($student->profile_picture_url) {
+                Storage::disk('public')->delete($student->profile_picture_url);
+            }
+            $student->delete();
+            return redirect()->route('admin.students.index')
+                             ->with('success', 'تم حذف الطالب بنجاح.');
+        } catch (\Exception $e) {
+            return redirect()->route('admin.students.index')
+                             ->with('error', 'حدث خطأ أثناء الحذف.');
+        }
+    }
+}
+```
+
+**`app/Http/Controllers/Admin/UniversityFacilityController.php`**
+
+```php
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\UniversityMedia;
+use App\Models\Faculty;
+use App\Http\Requests\Admin\StoreUniversityFacilityRequest; // ستحتاج لإنشاء هذا
+use App\Http\Requests\Admin\UpdateUniversityFacilityRequest; // ستحتاج لإنشاء هذا
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
+
+class UniversityFacilityController extends Controller
+{
+    public function __construct()
+    {
+        $this->middleware('auth:admin_web');
+    }
+
+    public function index(Request $request)
+    {
+        $query = UniversityMedia::with(['faculty', 'uploadedByAdmin'])->latest();
+
+        if ($request->filled('category')) {
+            $query->where('category', $request->category);
+        }
+        if ($request->filled('media_type')) {
+            $query->where('media_type', $request->media_type);
+        }
+        if ($request->filled('faculty_id')) {
+            $query->where('faculty_id', $request->faculty_id);
+        }
+
+        $mediaItems = $query->paginate(15);
+        $categories = UniversityMedia::distinct()->pluck('category')->filter()->sort();
+        $mediaTypes = ['image' => 'صورة', 'video' => 'فيديو', 'document' => 'مستند'];
+        $faculties = Faculty::orderBy('name_ar')->get(['id', 'name_ar']);
+
+        return view('admin.university_facilities.index', compact('mediaItems', 'categories', 'mediaTypes', 'faculties'));
+    }
+
+    public function create()
+    {
+        $categories = UniversityMedia::distinct()->pluck('category')->filter()->sort();
+        $mediaTypes = ['image' => 'صورة', 'video' => 'فيديو', 'document' => 'مستند'];
+        $faculties = Faculty::orderBy('name_ar')->get(['id', 'name_ar']);
+        return view('admin.university_facilities.create', compact('categories', 'mediaTypes', 'faculties'));
+    }
+
+    public function store(StoreUniversityFacilityRequest $request)
+    {
+        $validatedData = $request->validated();
+
+        if ($request->hasFile('media_file')) {
+            $path = $request->file('media_file')->store('university_media', 'public');
+            $validatedData['file_url'] = $path;
+        }
+        unset($validatedData['media_file']); // إزالة مفتاح الملف بعد التخزين
+
+        $validatedData['uploaded_by_admin_id'] = Auth::guard('admin_web')->id();
+
+        UniversityMedia::create($validatedData);
+
+        return redirect()->route('admin.university-facilities.index')
+                         ->with('success', 'تم إضافة وسيط الجامعة بنجاح.');
+    }
+
+    /**
+     * Display the specified resource.
+     * عادة لا نحتاج لعرض منفصل هنا، يمكن أن يتم ضمن الـ index أو edit
+     */
+    public function show(UniversityMedia $universityFacility) // اسم المتغير يجب أن يطابق اسم المورد
+    {
+        $universityFacility->load(['faculty', 'uploadedByAdmin']);
+        return view('admin.university_facilities.show', compact('universityFacility'));
+    }
+
+    public function edit(UniversityMedia $universityFacility)
+    {
+        $categories = UniversityMedia::distinct()->pluck('category')->filter()->sort();
+        $mediaTypes = ['image' => 'صورة', 'video' => 'فيديو', 'document' => 'مستند'];
+        $faculties = Faculty::orderBy('name_ar')->get(['id', 'name_ar']);
+        return view('admin.university_facilities.edit', compact('universityFacility', 'categories', 'mediaTypes', 'faculties'));
+    }
+
+    public function update(UpdateUniversityFacilityRequest $request, UniversityMedia $universityFacility)
+    {
+        $validatedData = $request->validated();
+
+        if ($request->hasFile('media_file')) {
+            // حذف الملف القديم إذا كان موجودًا
+            if ($universityFacility->file_url) {
+                Storage::disk('public')->delete($universityFacility->file_url);
+            }
+            $path = $request->file('media_file')->store('university_media', 'public');
+            $validatedData['file_url'] = $path;
+        }
+        unset($validatedData['media_file']);
+
+        $universityFacility->update($validatedData);
+
+        return redirect()->route('admin.university-facilities.index')
+                         ->with('success', 'تم تحديث وسيط الجامعة بنجاح.');
+    }
+
+    public function destroy(UniversityMedia $universityFacility)
+    {
+        try {
+            if ($universityFacility->file_url) {
+                Storage::disk('public')->delete($universityFacility->file_url);
+            }
+            $universityFacility->delete();
+            return redirect()->route('admin.university-facilities.index')
+                             ->with('success', 'تم حذف وسيط الجامعة بنجاح.');
+        } catch (\Exception $e) {
+            return redirect()->route('admin.university-facilities.index')
+                             ->with('error', 'حدث خطأ أثناء الحذف.');
+        }
+    }
+}
+```
+
+---
+
+**2. Form Requests المتبقية (`app/Http/Requests/Admin`)**
+
+**`app/Http/Requests/Admin/StoreAdminUserRequest.php`**
+
+```php
+<?php
+
+namespace App\Http\Requests\Admin;
+
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rules\Password;
+
+class StoreAdminUserRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return Auth::guard('admin_web')->check() && Auth::guard('admin_web')->user()->role === 'superadmin';
+    }
+
+    public function rules(): array
+    {
+        return [
+            'username' => 'required|string|max:100|unique:admin_users,username',
+            'name_ar' => 'required|string|max:255',
+            'name_en' => 'nullable|string|max:255',
+            'email' => 'required|string|email|max:255|unique:admin_users,email',
+            'password' => ['required', 'string', Password::min(8)->mixedCase()->numbers()->symbols(), 'confirmed'],
+            'role' => 'required|string|in:admin,content_manager,superadmin',
+            'is_active' => 'required|boolean',
+        ];
+    }
+}
+```
+
+**`app/Http/Requests/Admin/UpdateAdminUserRequest.php`**
+
+```php
+<?php
+
+namespace App\Http\Requests\Admin;
+
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
+
+class UpdateAdminUserRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return Auth::guard('admin_web')->check() && Auth::guard('admin_web')->user()->role === 'superadmin';
+    }
+
+    public function rules(): array
+    {
+        $adminUserId = $this->route('admin_user')->id; // اسم البارامتر في المسار
+
+        return [
+            'username' => ['required', 'string', 'max:100', Rule::unique('admin_users', 'username')->ignore($adminUserId)],
+            'name_ar' => 'required|string|max:255',
+            'name_en' => 'nullable|string|max:255',
+            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('admin_users', 'email')->ignore($adminUserId)],
+            'password' => ['nullable', 'string', Password::min(8)->mixedCase()->numbers()->symbols(), 'confirmed'],
+            'role' => 'required|string|in:admin,content_manager,superadmin',
+            'is_active' => 'required|boolean',
+        ];
+    }
+}
+```
+
+**(استكمل بقية الـ Form Requests بنفس الطريقة، مع تكييف قواعد التحقق)**
+
+---
+
+**3. API Resource Collections المطلوبة (`app/Http/Resources`)**
+
+**`app/Http/Resources/UniversityMediaCollection.php`**
+
+```php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\ResourceCollection;
+
+class UniversityMediaCollection extends ResourceCollection
+{
+    /**
+     * The "data" wrapper that should be applied.
+     *
+     * @var string|null
+     */
+    public static $wrap = 'data'; // Or null if you don't want 'data' wrapper
+
+    /**
+     * Transform the resource collection into an array.
+     *
+     * @return array<int|string, mixed>
+     */
+    public function toArray(Request $request): array
+    {
+        return [
+            'data' => UniversityMediaResource::collection($this->collection),
+            // Include pagination links if you are paginating the results
+            $this->mergeWhen($this->resource instanceof \Illuminate\Pagination\AbstractPaginator, [
+                'links' => [
+                    'first' => $this->url(1),
+                    'last' => $this->url($this->lastPage()),
+                    'prev' => $this->previousPageUrl(),
+                    'next' => $this->nextPageUrl(),
+                ],
+                'meta' => [
+                    'current_page' => $this->currentPage(),
+                    'from' => $this->firstItem(),
+                    'last_page' => $this->lastPage(),
+                    'path' => $this->path(),
+                    'per_page' => $this->perPage(),
+                    'to' => $this->lastItem(),
+                    'total' => $this->total(),
+                ],
+            ])
+        ];
+    }
+}
+```
+
+**`app/Http/Resources/ProjectCollection.php`**
+
+```php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\ResourceCollection;
+
+class ProjectCollection extends ResourceCollection
+{
+    public static $wrap = 'data';
+
+    public function toArray(Request $request): array
+    {
+        return [
+            'data' => ProjectResource::collection($this->collection),
+             $this->mergeWhen($this->resource instanceof \Illuminate\Pagination\AbstractPaginator, [
+                'links' => [
+                    'first' => $this->url(1),
+                    'last' => $this->url($this->lastPage()),
+                    'prev' => $this->previousPageUrl(),
+                    'next' => $this->nextPageUrl(),
+                ],
+                'meta' => [
+                    'current_page' => $this->currentPage(),
+                    'from' => $this->firstItem(),
+                    'last_page' => $this->lastPage(),
+                    'path' => $this->path(),
+                    'per_page' => $this->perPage(),
+                    'to' => $this->lastItem(),
+                    'total' => $this->total(),
+                ],
+            ])
+        ];
+    }
+}
+```
+
+**`app/Http/Resources/NotificationCollection.php`**
+
+```php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\ResourceCollection;
+
+class NotificationCollection extends ResourceCollection
+{
+    public static $wrap = 'data';
+
+    public function toArray(Request $request): array
+    {
+        return [
+            'data' => NotificationResource::collection($this->collection),
+             $this->mergeWhen($this->resource instanceof \Illuminate\Pagination\AbstractPaginator, [
+                'links' => [
+                    'first' => $this->url(1),
+                    'last' => $this->url($this->lastPage()),
+                    'prev' => $this->previousPageUrl(),
+                    'next' => $this->nextPageUrl(),
+                ],
+                'meta' => [
+                    'current_page' => $this->currentPage(),
+                    'from' => $this->firstItem(),
+                    'last_page' => $this->lastPage(),
+                    'path' => $this->path(),
+                    'per_page' => $this->perPage(),
+                    'to' => $this->lastItem(),
+                    'total' => $this->total(),
+                ],
+            ])
+        ];
+    }
+}
+```
+
+**`app/Http/Resources/InstructorCollection.php`**
+
+```php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\ResourceCollection;
+
+class InstructorCollection extends ResourceCollection
+{
+    public static $wrap = 'data';
+
+    public function toArray(Request $request): array
+    {
+        return [
+            'data' => InstructorResource::collection($this->collection),
+            $this->mergeWhen($this->resource instanceof \Illuminate\Pagination\AbstractPaginator, [
+                'links' => [
+                    'first' => $this->url(1),
+                    'last' => $this->url($this->lastPage()),
+                    'prev' => $this->previousPageUrl(),
+                    'next' => $this->nextPageUrl(),
+                ],
+                'meta' => [
+                    'current_page' => $this->currentPage(),
+                    'from' => $this->firstItem(),
+                    'last_page' => $this->lastPage(),
+                    'path' => $this->path(),
+                    'per_page' => $this->perPage(),
+                    'to' => $this->lastItem(),
+                    'total' => $this->total(),
+                ],
+            ])
+        ];
+    }
+}
+```
+
+---
+
+**4. Form Requests (المتبقية - إنشاء الملفات)**
+
+*   `app/Http/Requests/Admin/UpdateSpecializationRequest.php` (مشابه لـ `UpdateFacultyRequest` مع تغيير الحقول)
+*   `app/Http/Requests/Admin/StoreInstructorRequest.php` (مشابه لـ `StoreFacultyRequest` مع تغيير الحقول)
+*   `app/Http/Requests/Admin/UpdateCourseRequest.php` (مشابه لـ `StoreCourseRequest` مع تعديل `unique` rules)
+
+---
+
+**5. API Resources (المتبقية - إنشاء الملفات)**
+
+*   `app/Http/Resources/FacultyResource.php` (مشابه لـ `InstructorResource` مع تغيير الحقول)
+*   `app/Http/Resources/AdminUserResource.php` (لعرض بيانات المدير، مع إخفاء `password_hash`)
+
+**`app/Http/Resources/FacultyResource.php`**
+
+```php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class FacultyResource extends JsonResource
+{
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'name_ar' => $this->name_ar,
+            'name_en' => $this->name_en,
+            'description_ar' => $this->description_ar,
+            'description_en' => $this->description_en,
+            'dean' => new InstructorResource($this->whenLoaded('dean')),
+            'created_at' => $this->created_at?->toDateTimeString(),
+        ];
+    }
+}
+```
+
+**`app/Http/Resources/AdminUserResource.php`**
+
+```php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class AdminUserResource extends JsonResource
+{
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'username' => $this->username,
+            'name_ar' => $this->name_ar,
+            'name_en' => $this->name_en,
+            'email' => $this->email,
+            'role' => $this->role,
+            'is_active' => (bool) $this->is_active,
+            'created_at' => $this->created_at?->toDateTimeString(),
+        ];
+    }
+}
+```
+
+بهذا أكون قد قدمت محتوى المتحكمات وملفات الـ Resource Collections و Form Requests المحددة، بالإضافة إلى النماذج المفقودة. تذكر أن هذا أساس، وستحتاج إلى بناء الـ Views والتفاصيل الأخرى.
 
 ---
 
