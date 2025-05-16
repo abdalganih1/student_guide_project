@@ -73,7 +73,9 @@ class UniversityFacilityController extends Controller
     public function show(UniversityMedia $universityFacility) // اسم المتغير يجب أن يطابق اسم المورد
     {
         $universityFacility->load(['faculty', 'uploadedByAdmin']);
-        return view('admin.university_facilities.show', compact('universityFacility'));
+        // في UniversityFacilityController -> show()
+        $mediaTypes = ['image' => 'صورة', 'video' => 'فيديو', 'document' => 'مستند'];
+        return view('admin.university_facilities.show', compact('universityFacility', 'mediaTypes'));
     }
 
     public function edit(UniversityMedia $universityFacility)

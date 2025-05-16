@@ -9690,3 +9690,1149 @@ public function enrolledStudents() // الطلاب المسجلون في هذا 
 ---
 
 
+بالتأكيد، سنقوم الآن بتصميم ملف `UpdateProjectRequest` ثم ملفات الـ Blade Views الخاصة بإدارة المشاريع (`Projects`).
+
+**أولاً: تصميم ملف `UpdateProjectRequest`**
+
+1.  **إنشاء الملف (إذا لم تكن قد أنشأته بالفعل):**
+    ```bash
+    php artisan make:request Admin/UpdateProjectRequest
+    ```
+
+2.  **محتوى `app/Http/Requests/Admin/UpdateProjectRequest.php`:**
+
+    ```php
+    <?php
+
+    namespace App\Http\Requests\Admin;
+
+    use Illuminate\Foundation\Http\FormRequest;
+    use Illuminate\Support\Facades\Auth;
+    use Illuminate\Validation\Rule;
+
+    class UpdateProjectRequest extends FormRequest
+    {
+        /**
+         * Determine if the user is authorized to make this request.
+         */
+        public function authorize(): bool
+        {
+            return Auth::guard('admin_web')->check(); // أو تحقق من صلاحية معينة
+        }
+
+        /**
+         * Get the validation rules that apply to the request.
+         *
+         * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+         */
+        public function rules(): array
+        {
+            // $projectId = $this->route('project')->id; // لا نحتاج عادةً لـ ignore unique هنا لعناوين المشاريع
+
+            return [
+                'specialization_id' => 'required|exists:specializations,id',
+                'title_ar' => 'required|string|max:500',
+                'title_en' => 'nullable|string|max:500',
+                'abstract_ar' => 'nullable|string',
+                'abstract_en' => 'nullable|string',
+                'year' => 'required|integer|digits:4|min:2000|max:' . (date('Y') + 5), // سنة معقولة
+                'semester' => 'required|string|in:الخريف,الربيع', // تأكد من أن هذه القيم تطابق ما تستخدمه
+                'student_names' => 'nullable|string',
+                'supervisor_instructor_id' => 'nullable|exists:instructors,id',
+                'project_type' => 'nullable|string|max:100',
+                'keywords' => 'nullable|string',
+            ];
+        }
+
+        /**
+         * Get custom messages for validator errors.
+         */
+        public function messages(): array
+        {
+            return [
+                'specialization_id.required' => 'حقل الاختصاص مطلوب.',
+                'specialization_id.exists' => 'الاختصاص المحدد غير موجود.',
+                'title_ar.required' => 'عنوان المشروع باللغة العربية مطلوب.',
+                'title_ar.max' => 'عنوان المشروع (عربي) طويل جداً.',
+                'year.required' => 'سنة المشروع مطلوبة.',
+                'year.integer' => 'سنة المشروع يجب أن تكون رقمًا صحيحًا.',
+                'year.digits' => 'سنة المشروع يجب أن تتكون من 4 أرقام.',
+                'semester.required' => 'الفصل الدراسي للمشروع مطلوب.',
+                'semester.in' => 'قيمة الفصل الدراسي غير صالحة.',
+                'supervisor_instructor_id.exists' => 'المشرف المحدد غير موجود.',
+            ];
+        }
+    }
+    ```
+
+---
+
+**ثانياً: تصميم ملفات الـ Blade Views لإدارة المشاريع**
+
+تأكد من أن لديك المجلد `resources/views/admin/projects/`.
+
+1.  **`resources/views/admin/projects/index.blade.php`**
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'إدارة المشاريع')
+
+    @section('content')
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1><i class="fas fa-project-diagram me-2"></i>إدارة المشاريع</h1>
+            <a href="{{ route('admin.projects.create') }}" class="btn btn-success">
+                <i class="fas fa-plus me-1"></i> إضافة مشروع جديد
+            </a>
+        </div>
+
+        {{-- قسم الفلترة --}}
+        <div class="card mb-3">
+            <div class="card-body">
+                <form method="GET" action="{{ route('admin.projects.index') }}">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-3">
+                            <label for="search_filter" class="form-label">بحث (عنوان، طلاب، كلمات مفتاحية)</label>
+                            <input type="text" class="form-control form-control-sm" id="search_filter" name="search" value="{{ request('search') }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="specialization_id_filter" class="form-label">الاختصاص</label>
+                            <select class="form-select form-select-sm" id="specialization_id_filter" name="specialization_id">
+                                <option value="">-- كل الاختصاصات --</option>
+                                @foreach($specializations as $specialization)
+                                    <option value="{{ $specialization->id }}" {{ request('specialization_id') == $specialization->id ? 'selected' : '' }}>
+                                        {{ $specialization->name_ar }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="year_filter" class="form-label">السنة</label>
+                            <select class="form-select form-select-sm" id="year_filter" name="year">
+                                <option value="">-- كل السنوات --</option>
+                                @foreach($years as $year)
+                                    <option value="{{ $year }}" {{ request('year') == $year ? 'selected' : '' }}>
+                                        {{ $year }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="semester_filter" class="form-label">الفصل</label>
+                            <select class="form-select form-select-sm" id="semester_filter" name="semester">
+                                <option value="">-- كل الفصول --</option>
+                                @foreach($semesters as $semester)
+                                    <option value="{{ $semester }}" {{ request('semester') == $semester ? 'selected' : '' }}>
+                                        {{ $semester }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-1">
+                            <button type="submit" class="btn btn-primary btn-sm w-100">فلترة</button>
+                        </div>
+                        <div class="col-md-1">
+                            <a href="{{ route('admin.projects.index') }}" class="btn btn-secondary btn-sm w-100">إلغاء</a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                @if($projects->isEmpty())
+                    <div class="alert alert-info text-center">لا توجد مشاريع تخرج لعرضها حالياً.</div>
+                @else
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>العنوان (عربي)</th>
+                                    <th>الاختصاص</th>
+                                    <th>المشرف</th>
+                                    <th>السنة</th>
+                                    <th>الفصل</th>
+                                    <th>الطلاب</th>
+                                    <th>الإجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($projects as $project)
+                                <tr>
+                                    <td>{{ $project->id }}</td>
+                                    <td>
+                                        <a href="{{ route('admin.projects.show', $project) }}">{{ Str::limit($project->title_ar, 50) }}</a>
+                                        @if($project->title_en) <small class="d-block text-muted">{{ Str::limit($project->title_en, 50) }}</small> @endif
+                                    </td>
+                                    <td>{{ $project->specialization->name_ar ?? 'غير محدد' }}</td>
+                                    <td>{{ $project->supervisor->name_ar ?? '-' }}</td>
+                                    <td>{{ $project->year }}</td>
+                                    <td>{{ $project->semester }}</td>
+                                    <td>{{ Str::limit($project->student_names, 30) ?: '-' }}</td>
+                                    <td>
+                                        <a href="{{ route('admin.projects.show', $project) }}" class="btn btn-sm btn-info" title="عرض"><i class="fas fa-eye"></i></a>
+                                        <a href="{{ route('admin.projects.edit', $project) }}" class="btn btn-sm btn-primary" title="تعديل"><i class="fas fa-edit"></i></a>
+                                        <form action="{{ route('admin.projects.destroy', $project) }}" method="POST" class="d-inline" onsubmit="return confirm('هل أنت متأكد من رغبتك في حذف هذا المشروع؟');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn btn-sm btn-danger" title="حذف"><i class="fas fa-trash"></i></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-3">
+                        {{ $projects->appends(request()->query())->links() }}
+                    </div>
+                @endif
+            </div>
+        </div>
+    </div>
+    @endsection
+    ```
+
+2.  **`resources/views/admin/projects/create.blade.php`**
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'إضافة مشروع تخرج جديد')
+
+    @section('content')
+    <div class="container-fluid">
+        <h1><i class="fas fa-plus-circle me-2"></i>إضافة مشروع تخرج جديد</h1>
+
+        <div class="card mt-3">
+            <div class="card-body">
+                <form action="{{ route('admin.projects.store') }}" method="POST">
+                    @csrf
+
+                    <div class="mb-3">
+                        <label for="title_ar" class="form-label">عنوان المشروع (عربي) <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control @error('title_ar') is-invalid @enderror" id="title_ar" name="title_ar" value="{{ old('title_ar') }}" required>
+                        @error('title_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="title_en" class="form-label">عنوان المشروع (إنجليزي)</label>
+                        <input type="text" class="form-control @error('title_en') is-invalid @enderror" id="title_en" name="title_en" value="{{ old('title_en') }}">
+                        @error('title_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="specialization_id" class="form-label">الاختصاص <span class="text-danger">*</span></label>
+                            <select class="form-select @error('specialization_id') is-invalid @enderror" id="specialization_id" name="specialization_id" required>
+                                <option value="">-- اختر الاختصاص --</option>
+                                @foreach($specializations as $specialization)
+                                    <option value="{{ $specialization->id }}" {{ old('specialization_id', request('specialization_id')) == $specialization->id ? 'selected' : '' }}>
+                                        {{ $specialization->name_ar }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('specialization_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="supervisor_instructor_id" class="form-label">المشرف (اختياري)</label>
+                            <select class="form-select @error('supervisor_instructor_id') is-invalid @enderror" id="supervisor_instructor_id" name="supervisor_instructor_id">
+                                <option value="">-- اختر المشرف --</option>
+                                @foreach($instructors as $instructor)
+                                    <option value="{{ $instructor->id }}" {{ old('supervisor_instructor_id') == $instructor->id ? 'selected' : '' }}>
+                                        {{ $instructor->name_ar }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('supervisor_instructor_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="year" class="form-label">السنة <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control @error('year') is-invalid @enderror" id="year" name="year" value="{{ old('year', date('Y')) }}" required min="2000" max="{{ date('Y') + 5 }}">
+                            @error('year') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="semester" class="form-label">الفصل الدراسي <span class="text-danger">*</span></label>
+                            <select class="form-select @error('semester') is-invalid @enderror" id="semester" name="semester" required>
+                                <option value="">-- اختر الفصل --</option>
+                                @foreach($semesters as $semester)
+                                <option value="{{ $semester }}" {{ old('semester') == $semester ? 'selected' : '' }}>{{ $semester }}</option>
+                                @endforeach
+                            </select>
+                            @error('semester') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="student_names" class="form-label">أسماء الطلاب (اختياري - افصل بينهم بفاصلة)</label>
+                        <input type="text" class="form-control @error('student_names') is-invalid @enderror" id="student_names" name="student_names" value="{{ old('student_names') }}">
+                        @error('student_names') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="project_type" class="form-label">نوع المشروع (اختياري)</label>
+                        <input type="text" class="form-control @error('project_type') is-invalid @enderror" id="project_type" name="project_type" value="{{ old('project_type') }}" placeholder="مثال: بحثي، تطبيقي، تطويري">
+                        @error('project_type') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="abstract_ar" class="form-label">الملخص (عربي) (اختياري)</label>
+                        <textarea class="form-control @error('abstract_ar') is-invalid @enderror" id="abstract_ar" name="abstract_ar" rows="4">{{ old('abstract_ar') }}</textarea>
+                        @error('abstract_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="abstract_en" class="form-label">الملخص (إنجليزي) (اختياري)</label>
+                        <textarea class="form-control @error('abstract_en') is-invalid @enderror" id="abstract_en" name="abstract_en" rows="4">{{ old('abstract_en') }}</textarea>
+                        @error('abstract_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                     <div class="mb-3">
+                        <label for="keywords" class="form-label">الكلمات المفتاحية (اختياري - افصل بينهم بفاصلة)</label>
+                        <input type="text" class="form-control @error('keywords') is-invalid @enderror" id="keywords" name="keywords" value="{{ old('keywords') }}">
+                        @error('keywords') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> حفظ المشروع</button>
+                        <a href="{{ route('admin.projects.index') }}" class="btn btn-secondary">إلغاء</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    @endsection
+    ```
+
+3.  **`resources/views/admin/projects/edit.blade.php`**
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'تعديل مشروع التخرج: ' . Str::limit($project->title_ar, 30))
+
+    @section('content')
+    <div class="container-fluid">
+        <h1><i class="fas fa-edit me-2"></i>تعديل مشروع التخرج: {{ Str::limit($project->title_ar, 50) }}</h1>
+
+        <div class="card mt-3">
+            <div class="card-body">
+                <form action="{{ route('admin.projects.update', $project) }}" method="POST">
+                    @csrf
+                    @method('PUT')
+
+                    <div class="mb-3">
+                        <label for="title_ar" class="form-label">عنوان المشروع (عربي) <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control @error('title_ar') is-invalid @enderror" id="title_ar" name="title_ar" value="{{ old('title_ar', $project->title_ar) }}" required>
+                        @error('title_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="title_en" class="form-label">عنوان المشروع (إنجليزي)</label>
+                        <input type="text" class="form-control @error('title_en') is-invalid @enderror" id="title_en" name="title_en" value="{{ old('title_en', $project->title_en) }}">
+                        @error('title_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="specialization_id" class="form-label">الاختصاص <span class="text-danger">*</span></label>
+                            <select class="form-select @error('specialization_id') is-invalid @enderror" id="specialization_id" name="specialization_id" required>
+                                <option value="">-- اختر الاختصاص --</option>
+                                @foreach($specializations as $specialization)
+                                    <option value="{{ $specialization->id }}" {{ old('specialization_id', $project->specialization_id) == $specialization->id ? 'selected' : '' }}>
+                                        {{ $specialization->name_ar }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('specialization_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="supervisor_instructor_id" class="form-label">المشرف (اختياري)</label>
+                            <select class="form-select @error('supervisor_instructor_id') is-invalid @enderror" id="supervisor_instructor_id" name="supervisor_instructor_id">
+                                <option value="">-- اختر المشرف --</option>
+                                @foreach($instructors as $instructor)
+                                    <option value="{{ $instructor->id }}" {{ old('supervisor_instructor_id', $project->supervisor_instructor_id) == $instructor->id ? 'selected' : '' }}>
+                                        {{ $instructor->name_ar }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('supervisor_instructor_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="year" class="form-label">السنة <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control @error('year') is-invalid @enderror" id="year" name="year" value="{{ old('year', $project->year) }}" required min="2000" max="{{ date('Y') + 5 }}">
+                            @error('year') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="semester" class="form-label">الفصل الدراسي <span class="text-danger">*</span></label>
+                            <select class="form-select @error('semester') is-invalid @enderror" id="semester" name="semester" required>
+                                <option value="">-- اختر الفصل --</option>
+                                @foreach($semesters as $semester_option) {{-- تغيير اسم المتغير لتجنب التعارض --}}
+                                <option value="{{ $semester_option }}" {{ old('semester', $project->semester) == $semester_option ? 'selected' : '' }}>{{ $semester_option }}</option>
+                                @endforeach
+                            </select>
+                            @error('semester') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="student_names" class="form-label">أسماء الطلاب (اختياري - افصل بينهم بفاصلة)</label>
+                        <input type="text" class="form-control @error('student_names') is-invalid @enderror" id="student_names" name="student_names" value="{{ old('student_names', $project->student_names) }}">
+                        @error('student_names') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="project_type" class="form-label">نوع المشروع (اختياري)</label>
+                        <input type="text" class="form-control @error('project_type') is-invalid @enderror" id="project_type" name="project_type" value="{{ old('project_type', $project->project_type) }}">
+                        @error('project_type') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="abstract_ar" class="form-label">الملخص (عربي) (اختياري)</label>
+                        <textarea class="form-control @error('abstract_ar') is-invalid @enderror" id="abstract_ar" name="abstract_ar" rows="4">{{ old('abstract_ar', $project->abstract_ar) }}</textarea>
+                        @error('abstract_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="abstract_en" class="form-label">الملخص (إنجليزي) (اختياري)</label>
+                        <textarea class="form-control @error('abstract_en') is-invalid @enderror" id="abstract_en" name="abstract_en" rows="4">{{ old('abstract_en', $project->abstract_en) }}</textarea>
+                        @error('abstract_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                     <div class="mb-3">
+                        <label for="keywords" class="form-label">الكلمات المفتاحية (اختياري - افصل بينهم بفاصلة)</label>
+                        <input type="text" class="form-control @error('keywords') is-invalid @enderror" id="keywords" name="keywords" value="{{ old('keywords', $project->keywords) }}">
+                        @error('keywords') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> تحديث المشروع</button>
+                        <a href="{{ route('admin.projects.index') }}" class="btn btn-secondary">إلغاء</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    @endsection
+    ```
+
+4.  **`resources/views/admin/projects/show.blade.php`**
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'تفاصيل مشروع التخرج: ' . Str::limit($project->title_ar, 30))
+
+    @section('content')
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1><i class="fas fa-eye me-2"></i>تفاصيل مشروع: {{ $project->title_ar }}</h1>
+            <div>
+                <a href="{{ route('admin.projects.edit', $project) }}" class="btn btn-primary"><i class="fas fa-edit me-1"></i> تعديل</a>
+                <a href="{{ route('admin.projects.index') }}" class="btn btn-secondary">العودة إلى القائمة</a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-8">
+                        <h3>{{ $project->title_ar }}</h3>
+                        @if($project->title_en)
+                            <h5 class="text-muted">{{ $project->title_en }}</h5>
+                        @endif
+                    </div>
+                    <div class="col-md-4 text-md-end">
+                        <p class="mb-0"><strong>السنة:</strong> {{ $project->year }}</p>
+                        <p class="mb-0"><strong>الفصل:</strong> {{ $project->semester }}</p>
+                    </div>
+                </div>
+                <hr>
+                <dl class="row">
+                    <dt class="col-sm-3">الاختصاص:</dt>
+                    <dd class="col-sm-9"><a href="{{ route('admin.specializations.show', $project->specialization) }}">{{ $project->specialization->name_ar ?? 'غير محدد' }}</a></dd>
+
+                    <dt class="col-sm-3">المشرف:</dt>
+                    <dd class="col-sm-9">{{ $project->supervisor ? $project->supervisor->name_ar : 'لا يوجد' }}</dd>
+
+                    <dt class="col-sm-3">أسماء الطلاب:</dt>
+                    <dd class="col-sm-9">{{ $project->student_names ?: '-' }}</dd>
+
+                    <dt class="col-sm-3">نوع المشروع:</dt>
+                    <dd class="col-sm-9">{{ $project->project_type ?: '-' }}</dd>
+
+                    <dt class="col-sm-3">الكلمات المفتاحية:</dt>
+                    <dd class="col-sm-9">{{ $project->keywords ?: '-' }}</dd>
+                </dl>
+
+                @if($project->abstract_ar)
+                <hr>
+                <h5>الملخص (عربي):</h5>
+                <div class="bg-light p-3 rounded" style="white-space: pre-wrap;">{{ $project->abstract_ar }}</div>
+                @endif
+
+                @if($project->abstract_en)
+                <hr>
+                <h5>الملخص (إنجليزي):</h5>
+                <div class="bg-light p-3 rounded" style="white-space: pre-wrap;">{{ $project->abstract_en }}</div>
+                @endif
+                <hr>
+                <small class="text-muted">
+                    تم إنشاؤه بواسطة: {{ $project->createdByAdmin->name_ar ?? 'غير معروف' }} ({{ $project->createdByAdmin->username ?? '' }}) في {{ $project->created_at->translatedFormat('Y-m-d') }} <br>
+                    آخر تحديث بواسطة: {{ $project->lastUpdatedByAdmin->name_ar ?? 'غير معروف' }} ({{ $project->lastUpdatedByAdmin->username ?? '' }}) في {{ $project->updated_at->translatedFormat('Y-m-d') }}
+                </small>
+            </div>
+        </div>
+    </div>
+    @endsection
+    ```
+
+بهذا تكون قد حصلت على ملفات الـ Blade Views والـ Form Request الأساسية لإدارة المشاريع.
+
+---
+
+
+
+الخطأ `Use of unknown class: 'App\Http\Resources\CourseContentResource'` يعني أنك تحاول استخدام كلاس اسمه `CourseContentResource` ولكن PHP لا يستطيع العثور على تعريفه. هذا يحدث عادةً لأحد الأسباب التالية:
+
+1.  **الملف `CourseContentResource.php` غير موجود:** لم تقم بإنشاء هذا الملف بعد.
+2.  **الـ Namespace غير صحيح:** إذا كان الملف موجودًا، فقد يكون الـ namespace المحدد داخله لا يتطابق مع `App\Http\Resources`.
+3.  **لم يتم استيراد الكلاس:** حتى لو كان الملف موجودًا والـ namespace صحيحًا، قد تحتاج إلى استيراده في بداية ملف `CourseResource.php` باستخدام `use App\Http\Resources\CourseContentResource;`.
+
+**بناءً على طلباتك السابقة، يبدو أننا لم نقم بإنشاء `CourseContentResource` بشكل صريح.** النموذج الذي يتعامل مع موارد المقرر هو `CourseResource` (وليس `CourseContentResource`).
+
+**الحل:**
+
+يجب عليك تعديل `CourseResource.php` ليستخدم `CourseResourceResource` (وهو اسم الكلاس نفسه الذي نعمل عليه) أو اسم resource آخر مناسب لموارد المقرر إذا كنت قد أنشأته باسم مختلف (مثل `App\Http\Resources\CourseMaterialResource` أو ما شابه).
+
+**إذا كان `App\Models\CourseResource` هو النموذج لموارد المقرر، فمن المنطقي أن يكون الـ API Resource الخاص به هو `App\Http\Resources\CourseResourceResource` أو اسم مشابه قمت بإنشائه.**
+
+**السيناريو الأكثر احتمالاً هو أنك تقصد استخدام `App\Http\Resources\CourseResource` لعرض موارد المقرر (التي هي من نموذج `App\Models\CourseResource`).**
+
+**التعديل المقترح لـ `app/Http/Resources/CourseResource.php`:**
+
+```php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+// استيراد الـ Resource الذي سيمثل موارد المقرر
+// افترض أنك أنشأت Resource لنموذج CourseResource، سأسميه CourseMaterialResource كمثال.
+// إذا لم تنشئه بعد، ستحتاج لإنشائه: php artisan make:resource CourseMaterialResource
+use App\Http\Resources\CourseMaterialResource; // <--- قم بتغيير هذا إذا كان اسم الـ Resource مختلفًا
+
+class CourseResource extends JsonResource // هذا هو Resource لنموذج Course الرئيسي
+{
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'code' => $this->code,
+            'name_ar' => $this->name_ar,
+            'name_en' => $this->name_en,
+            'description_ar' => $this->description_ar,
+            'description_en' => $this->description_en,
+            'semester_display_info' => $this->semester_display_info,
+            'year_level' => $this->year_level,
+            'credits' => $this->credits,
+            'is_enrollable' => (bool) $this->is_enrollable,
+            'enrollment_capacity' => $this->enrollment_capacity,
+            'specialization' => new SpecializationResource($this->whenLoaded('specialization')),
+            // هنا التعديل: استخدم الـ Resource الصحيح لموارد المقرر
+            'resources' => CourseMaterialResource::collection($this->whenLoaded('resources')), // استخدمنا CourseMaterialResource كمثال
+            // إذا لم يكن هناك ربط مباشر بين Course و Instructor في هذا السياق، يمكنك إزالة السطر التالي أو تعديله
+            'instructors' => InstructorResource::collection($this->whenLoaded('instructors')), // المدرسون المعينون للمقرر (إذا كانت العلاقة موجودة في النموذج)
+            'created_at' => $this->created_at->toDateTimeString(),
+        ];
+    }
+}
+```
+
+**خطوات إضافية:**
+
+1.  **حدد اسم الـ Resource لموارد المقرر:**
+    *   هل قمت بإنشاء API Resource لنموذج `App\Models\CourseResource`؟
+    *   إذا كان اسمه `CourseResourceResource`، فاستخدمه: `'resources' => CourseResourceResource::collection($this->whenLoaded('resources')),`
+    *   إذا كان اسمه `CourseMaterialResource` (كما افترضت في المثال أعلاه)، فاستخدمه.
+    *   إذا لم تقم بإنشاء Resource مخصص لـ `App\Models\CourseResource` بعد، قم بإنشائه:
+        ```bash
+        php artisan make:resource CourseMaterialResource
+        ```
+        ثم قم بملء `CourseMaterialResource.php` لتحديد الحقول التي تريد عرضها من موارد المقرر:
+
+        **`app/Http/Resources/CourseMaterialResource.php` (مثال):**
+        ```php
+        <?php
+
+        namespace App\Http\Resources;
+
+        use Illuminate\Http\Request;
+        use Illuminate\Http\Resources\Json\JsonResource;
+
+        class CourseMaterialResource extends JsonResource // هذا لنموذج CourseResource
+        {
+            public function toArray(Request $request): array
+            {
+                return [
+                    'id' => $this->id,
+                    'title_ar' => $this->title_ar,
+                    'title_en' => $this->title_en,
+                    'url' => $this->url,
+                    'type' => $this->type,
+                    'description' => $this->description,
+                    'semester_relevance' => $this->semester_relevance,
+                    'uploaded_by' => new AdminUserResource($this->whenLoaded('uploadedByAdmin')), // افترض وجود علاقة
+                    'created_at' => $this->created_at->toDateTimeString(),
+                ];
+            }
+        }
+        ```
+
+2.  **تأكد من وجود علاقة `resources` في نموذج `App\Models\Course.php`:**
+    ```php
+    // app/Models/Course.php
+    // ...
+    public function resources()
+    {
+        return $this->hasMany(\App\Models\CourseResource::class); // تأكد أن المسار للنموذج صحيح
+    }
+    // ...
+    ```
+
+3.  **تأكد من وجود علاقة `instructors` في نموذج `App\Models\Course.php` (إذا كنت لا تزال تريد عرضها):**
+    إذا كنت قد قررت عدم ربط المدرسين بالمقررات بشكل مباشر، فيجب عليك إزالة `'instructors' => InstructorResource::collection($this->whenLoaded('instructors')),` من `CourseResource.php`. إذا كنت لا تزال تريد عرضها، تأكد أن العلاقة موجودة في نموذج `Course`.
+
+**الخلاصة:**
+
+المشكلة هي أنك تشير إلى كلاس `CourseContentResource` غير موجود أو غير مستورد. يجب عليك استخدام اسم الـ API Resource الصحيح الذي قمت بإنشائه لتمثيل بيانات نموذج `App\Models\CourseResource`. لقد قدمت مثالاً باستخدام `CourseMaterialResource`، ولكن يجب عليك تكييفه ليطابق اسم الـ Resource الذي تستخدمه أو الذي ستقوم بإنشائه.
+
+
+
+----
+
+بالتأكيد، سنقوم الآن بتصميم ملف `UpdateUniversityFacilityRequest` ثم ملفات الـ Blade Views الخاصة بإدارة وسائط الجامعة (`UniversityMedia` أو "المرافق الجامعية" كما سميتها).
+
+**أولاً: تصميم ملف `UpdateUniversityFacilityRequest`**
+
+1.  **إنشاء الملف (إذا لم تكن قد أنشأته بالفعل):**
+    ```bash
+    php artisan make:request Admin/UpdateUniversityFacilityRequest
+    ```
+
+2.  **محتوى `app/Http/Requests/Admin/UpdateUniversityFacilityRequest.php`:**
+
+    ```php
+    <?php
+
+    namespace App\Http\Requests\Admin;
+
+    use Illuminate\Foundation\Http\FormRequest;
+    use Illuminate\Support\Facades\Auth;
+    use Illuminate\Validation\Rule;
+
+    class UpdateUniversityFacilityRequest extends FormRequest
+    {
+        /**
+         * Determine if the user is authorized to make this request.
+         */
+        public function authorize(): bool
+        {
+            return Auth::guard('admin_web')->check(); // أو تحقق من صلاحية معينة
+        }
+
+        /**
+         * Get the validation rules that apply to the request.
+         *
+         * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+         */
+        public function rules(): array
+        {
+            // $mediaId = $this->route('university_facility')->id; // اسم البارامتر في المسار
+
+            return [
+                'title_ar' => 'nullable|string|max:255',
+                'title_en' => 'nullable|string|max:255',
+                'description_ar' => 'nullable|string',
+                'description_en' => 'nullable|string',
+                'media_file' => 'nullable|file|mimes:jpeg,png,jpg,gif,svg,mp4,mov,pdf,doc,docx,xls,xlsx,ppt,pptx|max:51200', // مثال: 50MB max، اضبط الأنواع والحجم
+                'media_type' => 'required|string|in:image,video,document', // يجب أن يكون مطلوبًا حتى لو لم يتم تغيير الملف
+                'category' => 'nullable|string|max:100',
+                'faculty_id' => 'nullable|exists:faculties,id',
+                'remove_media_file' => 'nullable|boolean', // لإزالة الملف الحالي
+            ];
+        }
+
+        /**
+         * Get custom messages for validator errors.
+         */
+        public function messages(): array
+        {
+            return [
+                'media_file.file' => 'يجب أن يكون حقل ملف الوسائط ملفًا.',
+                'media_file.mimes' => 'نوع الملف غير مدعوم.',
+                'media_file.max' => 'حجم الملف كبير جداً (الحد الأقصى 50MB).',
+                'media_type.required' => 'نوع الوسيط مطلوب.',
+                'media_type.in' => 'قيمة نوع الوسيط غير صالحة.',
+                'faculty_id.exists' => 'الكلية المحددة غير موجودة.',
+            ];
+        }
+    }
+    ```
+    **ملاحظات على `UpdateUniversityFacilityRequest`:**
+    *   جعلت `media_file` `nullable` لأنه عند التعديل، قد لا يرغب المستخدم في تغيير الملف الحالي.
+    *   أضفت `remove_media_file` كحقل `boolean` اختياري يمكن استخدامه في النموذج للسماح للمستخدم بإزالة الملف الحالي دون رفع ملف جديد.
+
+---
+
+**ثانياً: تصميم ملفات الـ Blade Views لإدارة وسائط الجامعة**
+
+تأكد من أن لديك المجلد `resources/views/admin/university_facilities/`.
+
+1.  **`resources/views/admin/university_facilities/index.blade.php`**
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'إدارة وسائط الجامعة')
+
+    @section('content')
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1><i class="fas fa-photo-video me-2"></i>إدارة وسائط الجامعة</h1>
+            <a href="{{ route('admin.university-facilities.create') }}" class="btn btn-success">
+                <i class="fas fa-plus me-1"></i> إضافة وسيط جديد
+            </a>
+        </div>
+
+        {{-- قسم الفلترة --}}
+        <div class="card mb-3">
+            <div class="card-body">
+                <form method="GET" action="{{ route('admin.university-facilities.index') }}">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-3">
+                            <label for="category_filter" class="form-label">التصنيف</label>
+                            <select class="form-select form-select-sm" id="category_filter" name="category">
+                                <option value="">-- كل التصنيفات --</option>
+                                @foreach($categories as $category)
+                                    <option value="{{ $category }}" {{ request('category') == $category ? 'selected' : '' }}>
+                                        {{ $category }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="media_type_filter" class="form-label">نوع الوسيط</label>
+                            <select class="form-select form-select-sm" id="media_type_filter" name="media_type">
+                                <option value="">-- كل الأنواع --</option>
+                                @foreach($mediaTypes as $typeKey => $typeName)
+                                    <option value="{{ $typeKey }}" {{ request('media_type') == $typeKey ? 'selected' : '' }}>
+                                        {{ $typeName }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="faculty_id_filter" class="form-label">الكلية</label>
+                            <select class="form-select form-select-sm" id="faculty_id_filter" name="faculty_id">
+                                <option value="">-- كل الكليات --</option>
+                                @foreach($faculties as $faculty)
+                                    <option value="{{ $faculty->id }}" {{ request('faculty_id') == $faculty->id ? 'selected' : '' }}>
+                                        {{ $faculty->name_ar }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-primary btn-sm w-100">فلترة</button>
+                        </div>
+                        <div class="col-md-1">
+                            <a href="{{ route('admin.university-facilities.index') }}" class="btn btn-secondary btn-sm w-100">إلغاء</a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                @if($mediaItems->isEmpty())
+                    <div class="alert alert-info text-center">لا توجد وسائط جامعية لعرضها حالياً.</div>
+                @else
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>معاينة</th>
+                                    <th>العنوان (عربي)</th>
+                                    <th>النوع</th>
+                                    <th>التصنيف</th>
+                                    <th>الكلية</th>
+                                    <th>رفع بواسطة</th>
+                                    <th>تاريخ الرفع</th>
+                                    <th>الإجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($mediaItems as $item)
+                                <tr>
+                                    <td>{{ $item->id }}</td>
+                                    <td>
+                                        @if($item->media_type == 'image' && $item->file_url)
+                                            <a href="{{ Storage::url($item->file_url) }}" target="_blank">
+                                                <img src="{{ Storage::url($item->file_url) }}" alt="{{ $item->title_ar ?: 'صورة' }}" class="img-thumbnail" style="width: 60px; height: 40px; object-fit: cover;">
+                                            </a>
+                                        @elseif($item->media_type == 'video' && $item->file_url)
+                                            <a href="{{ Storage::url($item->file_url) }}" target="_blank" class="btn btn-sm btn-outline-primary"><i class="fas fa-video"></i> فيديو</a>
+                                        @elseif($item->media_type == 'document' && $item->file_url)
+                                            <a href="{{ Storage::url($item->file_url) }}" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="fas fa-file-alt"></i> مستند</a>
+                                        @else
+                                            <i class="fas fa-file fa-2x text-secondary"></i>
+                                        @endif
+                                    </td>
+                                    <td>{{ $item->title_ar ?: (Str::limit(basename($item->file_url), 30) ?: '-') }}</td>
+                                    <td>{{ $mediaTypes[$item->media_type] ?? $item->media_type }}</td>
+                                    <td>{{ $item->category ?: '-' }}</td>
+                                    <td>{{ $item->faculty->name_ar ?? '-' }}</td>
+                                    <td>{{ $item->uploadedByAdmin->username ?? '-' }}</td>
+                                    <td>{{ $item->created_at->translatedFormat('Y-m-d') }}</td>
+                                    <td>
+                                        {{-- <a href="{{ route('admin.university-facilities.show', $item) }}" class="btn btn-sm btn-info" title="عرض"><i class="fas fa-eye"></i></a> --}}
+                                        <a href="{{ route('admin.university-facilities.edit', $item) }}" class="btn btn-sm btn-primary" title="تعديل"><i class="fas fa-edit"></i></a>
+                                        <form action="{{ route('admin.university-facilities.destroy', $item) }}" method="POST" class="d-inline" onsubmit="return confirm('هل أنت متأكد من رغبتك في حذف هذا الوسيط؟');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn btn-sm btn-danger" title="حذف"><i class="fas fa-trash"></i></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-3">
+                        {{ $mediaItems->appends(request()->query())->links() }}
+                    </div>
+                @endif
+            </div>
+        </div>
+    </div>
+    @endsection
+    ```
+
+2.  **`resources/views/admin/university_facilities/create.blade.php`**
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'إضافة وسيط جامعي جديد')
+
+    @section('content')
+    <div class="container-fluid">
+        <h1><i class="fas fa-plus-circle me-2"></i>إضافة وسيط جامعي جديد</h1>
+
+        <div class="card mt-3">
+            <div class="card-body">
+                <form action="{{ route('admin.university-facilities.store') }}" method="POST" enctype="multipart/form-data"> {{-- مهم لرفع الملفات --}}
+                    @csrf
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="title_ar" class="form-label">العنوان (عربي) (اختياري)</label>
+                            <input type="text" class="form-control @error('title_ar') is-invalid @enderror" id="title_ar" name="title_ar" value="{{ old('title_ar') }}">
+                            @error('title_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="title_en" class="form-label">العنوان (إنجليزي) (اختياري)</label>
+                            <input type="text" class="form-control @error('title_en') is-invalid @enderror" id="title_en" name="title_en" value="{{ old('title_en') }}">
+                            @error('title_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="media_file" class="form-label">ملف الوسائط <span class="text-danger">*</span></label>
+                        <input type="file" class="form-control @error('media_file') is-invalid @enderror" id="media_file" name="media_file" required>
+                        <small class="form-text text-muted">الأنواع المدعومة: صور (jpg, png, gif, svg)، فيديو (mp4, mov)، مستندات (pdf, doc, xls, ppt). الحد الأقصى: 50MB.</small>
+                        @error('media_file') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="media_type" class="form-label">نوع الوسيط <span class="text-danger">*</span></label>
+                            <select class="form-select @error('media_type') is-invalid @enderror" id="media_type" name="media_type" required>
+                                <option value="">-- اختر النوع --</option>
+                                @foreach($mediaTypes as $typeKey => $typeName)
+                                    <option value="{{ $typeKey }}" {{ old('media_type') == $typeKey ? 'selected' : '' }}>{{ $typeName }}</option>
+                                @endforeach
+                            </select>
+                            @error('media_type') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="category" class="form-label">التصنيف (اختياري)</label>
+                            <input list="category-suggestions" class="form-control @error('category') is-invalid @enderror" id="category" name="category" value="{{ old('category') }}" placeholder="مثال: مختبر، قاعة، مكتبة">
+                            <datalist id="category-suggestions">
+                                @foreach($categories as $cat)
+                                    <option value="{{ $cat }}">
+                                @endforeach
+                            </datalist>
+                            @error('category') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="faculty_id" class="form-label">الكلية المرتبطة (اختياري)</label>
+                        <select class="form-select @error('faculty_id') is-invalid @enderror" id="faculty_id" name="faculty_id">
+                            <option value="">-- لا يوجد ارتباط بكلية --</option>
+                            @foreach($faculties as $faculty)
+                                <option value="{{ $faculty->id }}" {{ old('faculty_id') == $faculty->id ? 'selected' : '' }}>
+                                    {{ $faculty->name_ar }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('faculty_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description_ar" class="form-label">الوصف (عربي) (اختياري)</label>
+                        <textarea class="form-control @error('description_ar') is-invalid @enderror" id="description_ar" name="description_ar" rows="3">{{ old('description_ar') }}</textarea>
+                        @error('description_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description_en" class="form-label">الوصف (إنجليزي) (اختياري)</label>
+                        <textarea class="form-control @error('description_en') is-invalid @enderror" id="description_en" name="description_en" rows="3">{{ old('description_en') }}</textarea>
+                        @error('description_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> حفظ الوسيط</button>
+                        <a href="{{ route('admin.university-facilities.index') }}" class="btn btn-secondary">إلغاء</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    @endsection
+    ```
+
+3.  **`resources/views/admin/university_facilities/edit.blade.php`**
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'تعديل وسيط جامعي: ' . ($universityFacility->title_ar ?: 'وسيط #' . $universityFacility->id))
+
+    @section('content')
+    <div class="container-fluid">
+        <h1><i class="fas fa-edit me-2"></i>تعديل وسيط جامعي: {{ $universityFacility->title_ar ?: 'وسيط #' . $universityFacility->id }}</h1>
+
+        <div class="card mt-3">
+            <div class="card-body">
+                <form action="{{ route('admin.university-facilities.update', $universityFacility) }}" method="POST" enctype="multipart/form-data">
+                    @csrf
+                    @method('PUT')
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="title_ar" class="form-label">العنوان (عربي) (اختياري)</label>
+                            <input type="text" class="form-control @error('title_ar') is-invalid @enderror" id="title_ar" name="title_ar" value="{{ old('title_ar', $universityFacility->title_ar) }}">
+                            @error('title_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="title_en" class="form-label">العنوان (إنجليزي) (اختياري)</label>
+                            <input type="text" class="form-control @error('title_en') is-invalid @enderror" id="title_en" name="title_en" value="{{ old('title_en', $universityFacility->title_en) }}">
+                            @error('title_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="media_file" class="form-label">تغيير ملف الوسائط (اختياري)</label>
+                        <input type="file" class="form-control @error('media_file') is-invalid @enderror" id="media_file" name="media_file">
+                        <small class="form-text text-muted">الأنواع المدعومة: صور، فيديو، مستندات. الحد الأقصى: 50MB.</small>
+                        @error('media_file') <div class="invalid-feedback">{{ $message }}</div> @enderror
+
+                        @if($universityFacility->file_url)
+                            <div class="mt-2">
+                                <p>الملف الحالي:
+                                    <a href="{{ Storage::url($universityFacility->file_url) }}" target="_blank">
+                                        {{ basename($universityFacility->file_url) }}
+                                    </a>
+                                </p>
+                                @if(Str::startsWith(Storage::mimeType($universityFacility->file_url), 'image/'))
+                                    <img src="{{ Storage::url($universityFacility->file_url) }}" alt="معاينة" style="max-width: 200px; max-height: 150px; object-fit: contain;">
+                                @endif
+                                <div class="form-check mt-1">
+                                    <input class="form-check-input" type="checkbox" name="remove_media_file" id="remove_media_file" value="1">
+                                    <label class="form-check-label" for="remove_media_file">
+                                        إزالة الملف الحالي (إذا تم رفع ملف جديد، سيتم استبداله تلقائياً)
+                                    </label>
+                                </div>
+                            </div>
+                        @endif
+                    </div>
+
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="media_type" class="form-label">نوع الوسيط <span class="text-danger">*</span></label>
+                            <select class="form-select @error('media_type') is-invalid @enderror" id="media_type" name="media_type" required>
+                                <option value="">-- اختر النوع --</option>
+                                @foreach($mediaTypes as $typeKey => $typeName)
+                                    <option value="{{ $typeKey }}" {{ old('media_type', $universityFacility->media_type) == $typeKey ? 'selected' : '' }}>{{ $typeName }}</option>
+                                @endforeach
+                            </select>
+                            @error('media_type') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="category" class="form-label">التصنيف (اختياري)</label>
+                            <input list="category-suggestions" class="form-control @error('category') is-invalid @enderror" id="category" name="category" value="{{ old('category', $universityFacility->category) }}">
+                             <datalist id="category-suggestions">
+                                @foreach($categories as $cat)
+                                    <option value="{{ $cat }}">
+                                @endforeach
+                            </datalist>
+                            @error('category') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="faculty_id" class="form-label">الكلية المرتبطة (اختياري)</label>
+                        <select class="form-select @error('faculty_id') is-invalid @enderror" id="faculty_id" name="faculty_id">
+                            <option value="">-- لا يوجد ارتباط بكلية --</option>
+                            @foreach($faculties as $faculty)
+                                <option value="{{ $faculty->id }}" {{ old('faculty_id', $universityFacility->faculty_id) == $faculty->id ? 'selected' : '' }}>
+                                    {{ $faculty->name_ar }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('faculty_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description_ar" class="form-label">الوصف (عربي) (اختياري)</label>
+                        <textarea class="form-control @error('description_ar') is-invalid @enderror" id="description_ar" name="description_ar" rows="3">{{ old('description_ar', $universityFacility->description_ar) }}</textarea>
+                        @error('description_ar') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description_en" class="form-label">الوصف (إنجليزي) (اختياري)</label>
+                        <textarea class="form-control @error('description_en') is-invalid @enderror" id="description_en" name="description_en" rows="3">{{ old('description_en', $universityFacility->description_en) }}</textarea>
+                        @error('description_en') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> تحديث الوسيط</button>
+                        <a href="{{ route('admin.university-facilities.index') }}" class="btn btn-secondary">إلغاء</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    @endsection
+    ```
+
+4.  **`resources/views/admin/university_facilities/show.blade.php` (اختياري)**
+    عادةً لا تحتاج لصفحة `show` منفصلة إذا كانت المعلومات الأساسية معروضة جيدًا في `index` و `edit`. لكن إذا أردت، يمكنك إنشاؤها بشكل مشابه لصفحات `show` الأخرى.
+
+    ```html
+    @extends('admin.layouts.app')
+
+    @section('title', 'تفاصيل الوسيط: ' . ($universityFacility->title_ar ?: 'وسيط #' . $universityFacility->id) )
+
+    @section('content')
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1><i class="fas fa-eye me-2"></i>تفاصيل وسيط جامعي</h1>
+            <div>
+                <a href="{{ route('admin.university-facilities.edit', $universityFacility) }}" class="btn btn-primary"><i class="fas fa-edit me-1"></i> تعديل</a>
+                <a href="{{ route('admin.university-facilities.index') }}" class="btn btn-secondary">العودة إلى القائمة</a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                @if($universityFacility->file_url)
+                <div class="mb-3 text-center">
+                    @if($universityFacility->media_type == 'image')
+                        <img src="{{ Storage::url($universityFacility->file_url) }}" alt="{{ $universityFacility->title_ar ?: 'صورة' }}" class="img-fluid" style="max-height: 400px; border: 1px solid #ddd; padding: 5px;">
+                    @elseif($universityFacility->media_type == 'video')
+                        <video controls width="100%" style="max-width: 600px;">
+                            <source src="{{ Storage::url($universityFacility->file_url) }}" type="{{ Storage::mimeType($universityFacility->file_url) }}">
+                            متصفحك لا يدعم عرض الفيديو.
+                        </video>
+                    @elseif($universityFacility->media_type == 'document')
+                        <p><a href="{{ Storage::url($universityFacility->file_url) }}" target="_blank" class="btn btn-info"><i class="fas fa-download me-1"></i> تحميل المستند ({{ basename($universityFacility->file_url) }})</a></p>
+                    @endif
+                </div>
+                @endif
+
+                <dl class="row">
+                    <dt class="col-sm-3">المعرف:</dt>
+                    <dd class="col-sm-9">{{ $universityFacility->id }}</dd>
+
+                    <dt class="col-sm-3">العنوان (عربي):</dt>
+                    <dd class="col-sm-9">{{ $universityFacility->title_ar ?: '-' }}</dd>
+
+                    <dt class="col-sm-3">العنوان (إنجليزي):</dt>
+                    <dd class="col-sm-9">{{ $universityFacility->title_en ?: '-' }}</dd>
+
+                    <dt class="col-sm-3">نوع الوسيط:</dt>
+                    <dd class="col-sm-9">{{ $mediaTypes[$universityFacility->media_type] ?? $universityFacility->media_type }}</dd>
+
+                    <dt class="col-sm-3">التصنيف:</dt>
+                    <dd class="col-sm-9">{{ $universityFacility->category ?: '-' }}</dd>
+
+                    <dt class="col-sm-3">الكلية المرتبطة:</dt>
+                    <dd class="col-sm-9">{{ $universityFacility->faculty->name_ar ?? '-' }}</dd>
+
+                    <dt class="col-sm-3">الوصف (عربي):</dt>
+                    <dd class="col-sm-9">{{ $universityFacility->description_ar ?: '-' }}</dd>
+
+                    <dt class="col-sm-3">الوصف (إنجليزي):</dt>
+                    <dd class="col-sm-9">{{ $universityFacility->description_en ?: '-' }}</dd>
+
+                    <dt class="col-sm-3">رُفع بواسطة:</dt>
+                    <dd class="col-sm-9">{{ $universityFacility->uploadedByAdmin->username ?? '-' }}</dd>
+
+                    <dt class="col-sm-3">تاريخ الرفع:</dt>
+                    <dd class="col-sm-9">{{ $universityFacility->created_at->translatedFormat('l, d F Y H:i') }}</dd>
+
+                    <dt class="col-sm-3">آخر تحديث:</dt>
+                    <dd class="col-sm-9">{{ $universityFacility->updated_at->translatedFormat('l, d F Y H:i') }}</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    @endsection
+    ```
+    **ملاحظة لـ `show.blade.php`:** ستحتاج إلى تمرير متغير `$mediaTypes` من المتحكم إذا أردت استخدامه لعرض اسم نوع الوسيط بشكل مقروء. يمكنك إضافته إلى دالة `show` في `UniversityFacilityController`:
+    ```php
+    // في UniversityFacilityController -> show()
+    $mediaTypes = ['image' => 'صورة', 'video' => 'فيديو', 'document' => 'مستند'];
+    return view('admin.university_facilities.show', compact('universityFacility', 'mediaTypes'));
+    ```
+
+بهذا تكون قد حصلت على ملفات الـ Blade Views والـ Form Request الأساسية لإدارة وسائط الجامعة.
+
+
+---
+
