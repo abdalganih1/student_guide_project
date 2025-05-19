@@ -81,19 +81,22 @@
                     @error('related_event_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
                 </div>
 
+                {{-- هذا هو الحقل الذي سنقوم بملئه بالطلاب --}}
                 <div id="students_div" class="mb-3" style="display: {{ in_array(old('target_audience_type'), ['custom_group', 'individual']) ? 'block' : 'none' }};">
-                    <label for="student_ids" class="form-label">الطلاب المستهدفون (إذا كان الجمهور مخصصًا)</label>
+                    <label for="student_ids" class="form-label">الطلاب المستهدفون (إذا كان الجمهور مخصصًا/فرديًا) <span id="student_ids_required" class="text-danger">*</span></label>
                     <select class="form-select @error('student_ids') is-invalid @enderror @error('student_ids.*') is-invalid @enderror" id="student_ids" name="student_ids[]" multiple data-placeholder="ابحث عن الطلاب...">
-                        {{-- هنا يمكنك استخدام Select2 أو طريقة أخرى لجلب الطلاب عند البحث --}}
-                        {{-- كمثال بسيط، يمكنك عرض بعض الطلاب إذا كانت القائمة صغيرة، أو الاعتماد على البحث --}}
-                        {{-- للحصول على تجربة أفضل، ابحث عن Select2 with AJAX data loading --}}
-                        @if(old('student_ids'))
-                            @foreach(App\Models\Student::whereIn('id', old('student_ids', []))->get() as $student)
-                                <option value="{{ $student->id }}" selected>{{ $student->full_name_ar }} ({{ $student->student_university_id }})</option>
-                            @endforeach
-                        @endif
+                        <option value="">-- اختر طالباً واحداً أو أكثر --</option> {{-- هذه الخيار لا يظهر في multiple select --}}
+
+                        {{-- <<-- قم بإلغاء التعليق عن هذه الحلقة --}}
+                        @foreach($students as $student)
+                            <option value="{{ $student->id }}" {{ in_array($student->id, old('student_ids', [])) ? 'selected' : '' }}>
+                                {{ $student->full_name_ar }} ({{ $student->student_university_id }})
+                            </option>
+                        @endforeach
+                         {{-- <<-- نهاية الحلقة --}}
+
                     </select>
-                    <small class="form-text text-muted">يمكنك اختيار طالب واحد أو أكثر. ستحتاج غالبًا إلى مكون بحث متقدم هنا للتعامل مع عدد كبير من الطلاب.</small>
+                    <small class="form-text text-muted">يمكنك اختيار طالب واحد أو أكثر. للحصول على تجربة أفضل مع عدد كبير من الطلاب، استخدم Select2 مع بحث.</small>
                     @error('student_ids') <div class="invalid-feedback">{{ $message }}</div> @enderror
                     @error('student_ids.*') <div class="invalid-feedback">{{ $message }}</div> @enderror
                 </div>
@@ -126,20 +129,37 @@
 {{-- <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script> --}}
 <script>
     function toggleTargetOptions() {
-        const targetType = document.getElementById('target_audience_type').value;
+        const targetTypeSelect = document.getElementById('target_audience_type');
+        const targetType = targetTypeSelect.value;
         const courseDiv = document.getElementById('related_course_div');
         const studentsDiv = document.getElementById('students_div');
-        // const eventDiv = document.getElementById('related_event_div'); // الفعالية يمكن أن تكون مرتبطة دائمًا
+        const studentsSelect = document.getElementById('student_ids');
+        const studentsRequiredSpan = document.getElementById('student_ids_required');
 
         courseDiv.style.display = (targetType === 'course_specific') ? 'block' : 'none';
         studentsDiv.style.display = (targetType === 'custom_group' || targetType === 'individual') ? 'block' : 'none';
 
+        // إضافة/إزالة required بناءً على نوع الجمهور المستهدف
+        if (targetType === 'custom_group' || targetType === 'individual') {
+             studentsSelect.setAttribute('required', 'required');
+             studentsRequiredSpan.style.display = 'inline';
+        } else {
+             studentsSelect.removeAttribute('required');
+             studentsRequiredSpan.style.display = 'none';
+        }
+
+
         if (targetType !== 'course_specific') {
             document.getElementById('related_course_id').value = '';
         }
+        // هنا نحتاج إلى مسح اختيارات الطلاب إذا تم التغيير من custom/individual إلى شيء آخر
         if (targetType !== 'custom_group' && targetType !== 'individual') {
-            // $('#student_ids').val(null).trigger('change'); // إذا كنت تستخدم Select2
-            document.getElementById('student_ids').value = null; // لحقل select عادي
+             // إذا كنت تستخدم Select2، استخدم هذا:
+             // $('#student_ids').val(null).trigger('change');
+             // لحقل select عادي، قم بمسح الاختيارات يدوياً:
+              for (let i = 0; i < studentsSelect.options.length; i++) {
+                 studentsSelect.options[i].selected = false;
+             }
         }
     }
 
@@ -147,7 +167,8 @@
         toggleTargetOptions(); // استدعاء عند تحميل الصفحة
         // $('#student_ids').select2({ // مثال لتفعيل Select2 إذا استخدمته
         //     placeholder: 'ابحث عن الطلاب بالاسم أو الرقم الجامعي',
-        //     // ajax: { ... } // يمكنك إضافة AJAX هنا للبحث الديناميكي
+        //     // allowClear: true, // للسماح بمسح الاختيار (مع Select2)
+        //     // ajax: { ... } // يمكنك إضافة AJAX هنا للبحث الديناميكي مع Select2
         // });
     });
 </script>

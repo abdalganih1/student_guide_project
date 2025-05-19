@@ -26,16 +26,17 @@
 
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label for="specialization_id" class="form-label">الاختصاص <span class="text-danger">*</span></label>
-                        <select class="form-select @error('specialization_id') is-invalid @enderror" id="specialization_id" name="specialization_id" required>
-                            <option value="">-- اختر الاختصاص --</option>
+                        <label for="specialization_ids" class="form-label">الاختصاصات المرتبطة <span class="text-danger">*</span></label>
+                        <select class="form-select @error('specialization_ids') is-invalid @enderror @error('specialization_ids.*') is-invalid @enderror" id="specialization_ids" name="specialization_ids[]" multiple required>
+                            <option value="">-- اختر اختصاصاً واحداً أو أكثر --</option>
                             @foreach($specializations as $specialization)
-                                <option value="{{ $specialization->id }}" {{ old('specialization_id', $project->specialization_id) == $specialization->id ? 'selected' : '' }}>
+                                <option value="{{ $specialization->id }}" {{ in_array($specialization->id, old('specialization_ids', $currentSpecializationIds)) ? 'selected' : '' }}>
                                     {{ $specialization->name_ar }}
                                 </option>
                             @endforeach
                         </select>
-                        @error('specialization_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        @error('specialization_ids') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        @error('specialization_ids.*') <div class="invalid-feedback">{{ $message }}</div> @enderror
                     </div>
 
                     <div class="col-md-6 mb-3">

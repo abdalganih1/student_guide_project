@@ -28,9 +28,14 @@
             </div>
             <hr>
             <dl class="row">
-                <dt class="col-sm-3">الاختصاص:</dt>
-                <dd class="col-sm-9"><a href="{{ route('admin.specializations.show', $project->specialization) }}">{{ $project->specialization->name_ar ?? 'غير محدد' }}</a></dd>
-
+                <dt class="col-sm-3">الاختصاصات المرتبطة:</dt>
+                <dd class="col-sm-9">
+                    @forelse($project->specializations as $specialization)
+                        <a href="{{ route('admin.specializations.show', $specialization) }}">{{ $specialization->name_ar }}</a>{{ !$loop->last ? ',' : '' }}
+                    @empty
+                        -
+                    @endforelse
+                </dd>
                 <dt class="col-sm-3">المشرف:</dt>
                 <dd class="col-sm-9">{{ $project->supervisor ? $project->supervisor->name_ar : 'لا يوجد' }}</dd>
 

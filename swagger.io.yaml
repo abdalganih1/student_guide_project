@@ -133,6 +133,22 @@ components:
       example: pending_approval
 
 
+    SpecializationSummaryResource: # <<-- اسم الـ Schema الجديد في التوثيق
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name_ar:
+          type: string
+          example: "هندسة البرمجيات"
+        name_en:
+          type: string
+          nullable: true
+          example: "Software Engineering"
+        faculty:
+          $ref: '#/components/schemas/FacultySummary' # يبقى كما هو إذا كان FacultySummary موجوداً
+
     # ---- Summary Schemas for Nested Objects ----
     FacultySummary:
       type: object
@@ -148,21 +164,8 @@ components:
           nullable: true
           example: "Faculty of Informatics Engineering"
 
-    SpecializationSummary:
-      type: object
-      properties:
-        id:
-          type: integer
-          example: 1
-        name_ar:
-          type: string
-          example: "هندسة البرمجيات"
-        name_en:
-          type: string
-          nullable: true
-          example: "Software Engineering"
-        faculty: # يمكن تضمين الكلية هنا كمُلخص
-          $ref: '#/components/schemas/FacultySummary'
+
+
     InstructorSummary:
       type: object
       properties:
@@ -214,8 +217,7 @@ components:
           nullable: true
           example: 3
         specialization: # هنا قد تكون المشكلة إذا كان يشير إلى SpecializationSummary غير صحيح
-           $ref: '#/components/schemas/SpecializationSummary'
-
+           $ref: '#/components/schemas/SpecializationSummaryResource'
 
     ProjectSummary:
       type: object
@@ -236,16 +238,13 @@ components:
         semester:
           $ref: '#/components/schemas/SemesterEnum'
         specialization: # هنا قد تكون المشكلة إذا كان يشير إلى SpecializationSummary غير صحيح
-           $ref: '#/components/schemas/SpecializationSummary'
+           $ref: '#/components/schemas/SpecializationSummaryResource'
         supervisor: # هنا قد تكون المشكلة إذا كان يشير إلى InstructorSummary غير صحيح
            $ref: '#/components/schemas/InstructorSummary'
         student_names:
           type: string
           nullable: true
           example: "بتول المحمد, ضياء الأحمد"
-
-
-
 
     # ---- Full Entity Schemas ----
     Student:
@@ -281,7 +280,7 @@ components:
           type: boolean
           example: true
         specialization: # هنا المشكلة المحتملة، إذا كان SpecializationSummary غير صحيح
-          $ref: '#/components/schemas/SpecializationSummary'
+          $ref: '#/components/schemas/SpecializationSummaryResource'
         created_at:
           type: string
           format: date-time
@@ -419,7 +418,7 @@ components:
           nullable: true
           example: 50
         specialization: # هنا المشكلة المحتملة، إذا كان SpecializationSummary غير صحيح
-          $ref: '#/components/schemas/SpecializationSummary'
+          $ref: '#/components/schemas/SpecializationSummaryResource'
         resources: # هنا المشكلة المحتملة، إذا كان CourseMaterial غير صحيح
           type: array
           items:
@@ -577,7 +576,7 @@ components:
           nullable: true
           example: "دليل الطالب, لارافيل, تطبيق موبايل, فلاتر"
         specialization: # هنا المشكلة المحتملة، إذا كان يشير إلى SpecializationSummary غير صحيح
-          $ref: '#/components/schemas/SpecializationSummary'
+          $ref: '#/components/schemas/SpecializationSummaryResource'
         supervisor: # هنا المشكلة المحتملة، إذا كان يشير إلى InstructorSummary غير صحيح
           $ref: '#/components/schemas/InstructorSummary'
           nullable: true
@@ -725,9 +724,6 @@ components:
           type: string
           format: date-time
           example: "2024-05-17T12:00:00Z"
-
-
-
 
     EventSummary: # <<-- التعريف الجديد (إذا لم يكن موجودًا)
       type: object
@@ -2067,7 +2063,7 @@ paths:
                   specializations:
                     type: array
                     items:
-                      $ref: '#/components/schemas/SpecializationSummary'
+                      $ref: '#/components/schemas/SpecializationSummaryResource'
                     example: # مثال لنتائج البحث في الاختصاصات
                       - id: 1
                         name_ar: "هندسة البرمجيات"

@@ -7,6 +7,7 @@ use App\Models\Notification;
 use App\Models\Student;
 use App\Models\Course;
 use App\Models\Event;
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth as AdminAuth;
 
@@ -27,8 +28,11 @@ class NotificationController extends Controller
     {
         $courses = Course::orderBy('name_ar')->get();
         $events = Event::orderBy('title_ar')->get();
-        // يمكنك جلب قائمة بالطلاب إذا أردت اختيار فردي/مجموعة مخصصة (قد تكون القائمة كبيرة)
-        return view('admin.notifications.create', compact('courses', 'events'));
+        // جلب قائمة بالطلاب المتاحين للاختيار
+        // يمكنك فلترتهم أو تحديد عدد معين إذا كانت القائمة كبيرة جداً
+        // أو الاعتماد على AJAX مع Select2 إذا كان العدد ضخم
+        $students = Student::orderBy('full_name_ar')->get(['id', 'full_name_ar', 'student_university_id']);
+        return view('admin.notifications.create', compact('courses', 'events', 'students'));
     }
 
 public function store(Request $request) // يمكنك إنشاء FormRequest لهذا لاحقًا إذا أردت

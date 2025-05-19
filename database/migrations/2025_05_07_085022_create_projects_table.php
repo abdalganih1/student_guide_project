@@ -13,7 +13,11 @@ return new class extends Migration
     {
         Schema::create('projects', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('specialization_id')->constrained('specializations')->cascadeOnDelete();
+            // تم حذف المفتاح الأجنبي القديم: $table->foreignId('specialization_id')->constrained('specializations')->cascadeOnDelete();
+            // إذا كنت تستخدم عمود specialization_id لأي سبب آخر (مثل التخصص الرئيسي للمشروع)
+            // يمكنك تركه كـ integer unsigned، لكنه لن يكون مفتاحاً أجنبياً إلزامياً للتخصص
+            $table->unsignedBigInteger('specialization_id')->nullable(); // جعله اختيارياً وليس FK إلزامياً للتخصص الرئيسي إن وجد
+
             $table->string('title_ar', 500);
             $table->string('title_en', 500)->nullable();
             $table->text('abstract_ar')->nullable();

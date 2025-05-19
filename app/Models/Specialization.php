@@ -4,6 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany; // إضافة هذه
 
 class Specialization extends Model
 {
@@ -25,42 +28,45 @@ class Specialization extends Model
     ];
 
     // العلاقات
-    public function faculty()
+    public function faculty(): BelongsTo
     {
         return $this->belongsTo(Faculty::class);
     }
 
-    public function courses()
+    public function courses(): HasMany
     {
         return $this->hasMany(Course::class);
     }
 
-    public function projects() // المشاريع
+    // تم حذف علاقة projects() HasMany القديمة
+    // public function projects(): HasMany { ... }
+
+    // إضافة علاقة المشاريع المتعددة
+    public function projects(): BelongsToMany
     {
-        return $this->hasMany(Project::class);
+        return $this->belongsToMany(Project::class, 'project_specialization', 'specialization_id', 'project_id');
     }
 
-    public function students()
+
+    public function students(): HasMany
     {
         return $this->hasMany(Student::class);
     }
 
-    public function createdByAdmin()
+    public function createdByAdmin(): BelongsTo
     {
         return $this->belongsTo(AdminUser::class, 'created_by_admin_id');
     }
 
-    public function lastUpdatedByAdmin()
+    public function lastUpdatedByAdmin(): BelongsTo
     {
         return $this->belongsTo(AdminUser::class, 'last_updated_by_admin_id');
     }
 
-    public function adminActions()
+    public function adminActions(): BelongsToMany
     {
-        // لعلاقة many-to-many عبر جدول admin_specialization_actions
-        // إذا كنت ستصل إلى بيانات action_type أو notes من خلال النموذج
         return $this->belongsToMany(AdminUser::class, 'admin_specialization_actions', 'specialization_id', 'admin_id')
                     ->withPivot('action_type', 'action_at', 'notes')
-                    ->withTimestamps('action_at'); // إذا كان action_at هو طابع زمني للإجراء
+                    ->withTimestamps('action_at');
     }
 }

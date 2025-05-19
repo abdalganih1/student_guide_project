@@ -91,8 +91,13 @@
                                     <a href="{{ route('admin.projects.show', $project) }}">{{ Str::limit($project->title_ar, 50) }}</a>
                                     @if($project->title_en) <small class="d-block text-muted">{{ Str::limit($project->title_en, 50) }}</small> @endif
                                 </td>
-                                <td>{{ $project->specialization->name_ar ?? 'غير محدد' }}</td>
-                                <td>{{ $project->supervisor->name_ar ?? '-' }}</td>
+                                <td>
+                                    @forelse($project->specializations as $specialization)
+                                        <span class="badge bg-info">{{ $specialization->name_ar }}</span>{{ !$loop->last ? ',' : '' }}
+                                    @empty
+                                        -
+                                    @endforelse
+                                </td>                                <td>{{ $project->supervisor->name_ar ?? '-' }}</td>
                                 <td>{{ $project->year }}</td>
                                 <td>{{ $project->semester }}</td>
                                 <td>{{ Str::limit($project->student_names, 30) ?: '-' }}</td>
